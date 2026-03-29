@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Calendar, TrendingUp } from 'lucide-react'
+import { Plus, Calendar, ChevronRight, Trash2 } from 'lucide-react'
 
 const SHIFTS = ['Tura I', 'Tura II', 'Tura III']
 const STATUS_COLORS = {
@@ -21,7 +21,9 @@ function getMonday(d = new Date()) {
   return date.toISOString().split('T')[0]
 }
 
-function PlanModal({ machines, onClose }) {
+// ─── Modal Plan Nou ───────────────────────────────────────────────────────────
+
+function PlanModal({ onClose }) {
   const qc = useQueryClient()
   const today = new Date()
   const monday = getMonday(today)
@@ -51,10 +53,14 @@ function PlanModal({ machines, onClose }) {
         <div className="space-y-3">
           <input className="input" placeholder="Denumire plan *" value={form.name} onChange={f('name')} />
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs text-slate-500 mb-1 block">Data inceput *</label>
-              <input className="input" type="date" value={form.startDate} onChange={f('startDate')} /></div>
-            <div><label className="text-xs text-slate-500 mb-1 block">Data sfarsit *</label>
-              <input className="input" type="date" value={form.endDate} onChange={f('endDate')} /></div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Data inceput *</label>
+              <input className="input" type="date" value={form.startDate} onChange={f('startDate')} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Data sfarsit *</label>
+              <input className="input" type="date" value={form.endDate} onChange={f('endDate')} />
+            </div>
           </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
@@ -72,12 +78,232 @@ function PlanModal({ machines, onClose }) {
   )
 }
 
+// ─── Modal Alocare Noua ───────────────────────────────────────────────────────
+
+function AllocationModal({ plan, machines, onClose }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    machineId: '',
+    planDate: plan.start_date?.split('T')[0] || getMonday(),
+    shift: 'Tura I',
+    productReference: '',
+    productName: '',
+    plannedQty: '',
+    plannedHours: '',
+  })
+  const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.post('/planning/allocations', data),
+    onSuccess: () => {
+      qc.invalidateQueries(['plan-detail', plan.id])
+      qc.invalidateQueries(['planning-dashboard'])
+      toast.success('Alocare adaugata.')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+  })
+
+  const activeMachines = machines?.filter(m => m.status === 'active') || []
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+        <h3 className="font-semibold text-slate-800 mb-1">Alocare noua</h3>
+        <p className="text-xs text-slate-400 mb-4">{plan.name}</p>
+        <div className="space-y-3">
+          {/* Masina — din lista reala */}
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Utilaj *</label>
+            <select className="input" value={form.machineId} onChange={f('machineId')}>
+              <option value="">Selecteaza utilaj</option>
+              {activeMachines.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.code} — {m.name} {m.location ? `(${m.location})` : ''}
+                </option>
+              ))}
+            </select>
+            {activeMachines.length === 0 && (
+              <p className="text-xs text-amber-500 mt-1">Niciun utilaj activ. Adauga utilaje din pagina Utilaje.</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Data *</label>
+              <input className="input" type="date" value={form.planDate}
+                min={plan.start_date?.split('T')[0]}
+                max={plan.end_date?.split('T')[0]}
+                onChange={f('planDate')} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Tura *</label>
+              <select className="input" value={form.shift} onChange={f('shift')}>
+                {SHIFTS.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <input className="input" placeholder="Referinta produs" value={form.productReference} onChange={f('productReference')} />
+          <input className="input" placeholder="Denumire produs" value={form.productName} onChange={f('productName')} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Cantitate planificata</label>
+              <input className="input" type="number" placeholder="buc" value={form.plannedQty} onChange={f('plannedQty')} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Ore planificate</label>
+              <input className="input" type="number" placeholder="ore" step="0.5" value={form.plannedHours} onChange={f('plannedHours')} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5 justify-end">
+          <button onClick={onClose} className="btn-secondary">Anuleaza</button>
+          <button
+            onClick={() => mutation.mutate({
+              masterPlanId: plan.id,
+              machineId: form.machineId,
+              planDate: form.planDate,
+              shift: form.shift,
+              productReference: form.productReference || null,
+              productName: form.productName || null,
+              plannedQty: form.plannedQty ? Number(form.plannedQty) : 0,
+              plannedHours: form.plannedHours ? Number(form.plannedHours) : null,
+            })}
+            disabled={mutation.isPending || !form.machineId || !form.planDate}
+            className="btn-primary"
+          >
+            {mutation.isPending ? 'Se salveaza...' : 'Adauga'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Detalii Plan ─────────────────────────────────────────────────────────────
+
+function PlanDetail({ plan, machines, onClose }) {
+  const qc = useQueryClient()
+  const [addAlloc, setAddAlloc] = useState(false)
+
+  const { data: detail } = useQuery({
+    queryKey: ['plan-detail', plan.id],
+    queryFn: () => api.get(`/planning/master-plans/${plan.id}`).then(r => r.data),
+  })
+
+  const deleteAlloc = useMutation({
+    mutationFn: (id) => api.delete(`/planning/allocations/${id}`),
+    onSuccess: () => { qc.invalidateQueries(['plan-detail', plan.id]); toast.success('Alocare stearsa.') },
+    onError: () => toast.error('Eroare la stergere.'),
+  })
+
+  const machineMap = {}
+  machines?.forEach(m => { machineMap[m.id] = m })
+
+  // Group allocations by date
+  const byDate = {}
+  detail?.allocations?.forEach(a => {
+    const d = a.plan_date?.split('T')[0] || a.plan_date
+    if (!byDate[d]) byDate[d] = []
+    byDate[d].push(a)
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-slate-800">{plan.name}</h3>
+            <p className="text-xs text-slate-400">
+              {new Date(plan.start_date).toLocaleDateString('ro-RO')} — {new Date(plan.end_date).toLocaleDateString('ro-RO')}
+              {' • Revizie '}{plan.revision}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setAddAlloc(true)} className="btn-primary text-xs flex items-center gap-1">
+              <Plus size={13} /> Alocare
+            </button>
+            <button onClick={onClose} className="btn-secondary text-xs">Inchide</button>
+          </div>
+        </div>
+
+        {!detail?.allocations?.length && (
+          <div className="text-center py-8 text-slate-400">
+            <Calendar size={32} className="mx-auto mb-2 text-slate-300" />
+            <p className="text-sm">Nicio alocare. Apasa "Alocare" pentru a adauga.</p>
+          </div>
+        )}
+
+        {Object.entries(byDate).sort().map(([date, allocs]) => (
+          <div key={date} className="mb-4">
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+              {new Date(date).toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+            <div className="space-y-2">
+              {allocs.map(a => {
+                const machine = machineMap[a.machine_id]
+                return (
+                  <div key={a.id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
+                    <div className="flex-shrink-0 text-center">
+                      <div className="text-xs font-bold text-blue-600 bg-blue-50 rounded px-2 py-0.5">
+                        {machine?.code || '?'}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-medium text-slate-700">{a.shift}</span>
+                      {a.product_reference && (
+                        <span className="text-xs text-slate-400 ml-2">{a.product_reference}</span>
+                      )}
+                      {a.product_name && (
+                        <span className="text-xs text-slate-400 ml-1">— {a.product_name}</span>
+                      )}
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {machine?.name}
+                        {machine?.location && ` • ${machine.location}`}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-slate-500 flex-shrink-0">
+                      {a.planned_qty > 0 && <div>{a.planned_qty.toLocaleString()} buc</div>}
+                      {a.planned_hours && <div>{a.planned_hours}h</div>}
+                    </div>
+                    <button
+                      onClick={() => deleteAlloc.mutate(a.id)}
+                      className="text-slate-300 hover:text-red-400 transition-colors ml-1"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+
+        {addAlloc && (
+          <AllocationModal plan={plan} machines={machines} onClose={() => setAddAlloc(false)} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Pagina principala ────────────────────────────────────────────────────────
+
 export default function PlanningPage() {
   const { user } = useAuth()
   const [modal, setModal] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState(null)
   const [tab, setTab] = useState('plans')
   const [weekStart, setWeekStart] = useState(getMonday())
   const isManager = ['admin', 'production_manager'].includes(user?.role)
+
+  // Utilaje din baza de date
+  const { data: machines } = useQuery({
+    queryKey: ['machines'],
+    queryFn: () => api.get('/machines').then(r => r.data.data),
+  })
 
   const { data: plans, isLoading } = useQuery({
     queryKey: ['master-plans'],
@@ -122,7 +348,10 @@ export default function PlanningPage() {
         <div className="space-y-3">
           {isLoading && <p className="text-slate-400 text-sm">Se incarca...</p>}
           {plans?.data?.map(p => (
-            <div key={p.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+            <div key={p.id}
+              className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between hover:border-blue-200 cursor-pointer transition-colors"
+              onClick={() => setSelectedPlan(p)}
+            >
               <div>
                 <h4 className="font-medium text-slate-800">{p.name}</h4>
                 <p className="text-xs text-slate-400 mt-0.5">
@@ -130,15 +359,18 @@ export default function PlanningPage() {
                   {' • Revizie '}{p.revision}
                 </p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[p.status]}`}>
-                {p.status}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[p.status]}`}>
+                  {p.status}
+                </span>
+                <ChevronRight size={14} className="text-slate-300" />
+              </div>
             </div>
           ))}
           {plans?.data?.length === 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">
               <Calendar size={32} className="mx-auto mb-2 text-slate-300" />
-              Niciun plan creat.
+              Niciun plan. Apasa "Plan nou" pentru a incepe.
             </div>
           )}
         </div>
@@ -167,6 +399,42 @@ export default function PlanningPage() {
                   </div>
                 ))}
               </div>
+
+              {dashboard.capacity?.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b"><h4 className="font-medium text-slate-700">Incarcare utilaje</h4></div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium text-slate-600">Utilaj</th>
+                        <th className="text-left px-4 py-2 font-medium text-slate-600 hidden md:table-cell">Data</th>
+                        <th className="text-right px-4 py-2 font-medium text-slate-600">Disponibil</th>
+                        <th className="text-right px-4 py-2 font-medium text-slate-600">Planificat</th>
+                        <th className="text-right px-4 py-2 font-medium text-slate-600">Incarcare</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dashboard.capacity.map(c => {
+                        const load = Number(c.load_percent)
+                        const color = load > 100 ? 'text-red-500' : load > 80 ? 'text-amber-500' : 'text-green-600'
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-2 font-medium text-slate-800">
+                              {c.machine_code} <span className="text-slate-400 font-normal text-xs">— {c.machine_name}</span>
+                            </td>
+                            <td className="px-4 py-2 text-slate-400 text-xs hidden md:table-cell">
+                              {new Date(c.plan_date).toLocaleDateString('ro-RO')}
+                            </td>
+                            <td className="px-4 py-2 text-right text-slate-500">{c.available_hours}h</td>
+                            <td className="px-4 py-2 text-right text-slate-500">{c.planned_hours}h</td>
+                            <td className={`px-4 py-2 text-right font-bold ${color}`}>{Math.round(load)}%</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {dashboard.productSummary?.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -231,6 +499,9 @@ export default function PlanningPage() {
       )}
 
       {modal && <PlanModal onClose={() => setModal(false)} />}
+      {selectedPlan && (
+        <PlanDetail plan={selectedPlan} machines={machines} onClose={() => setSelectedPlan(null)} />
+      )}
     </div>
   )
 }
