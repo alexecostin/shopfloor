@@ -8,6 +8,8 @@ import logger from './config/logger.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import machinesRoutes from './modules/machines/machines.routes.js';
 import productionRoutes from './modules/production/production.routes.js';
+import maintenanceRoutes from './modules/maintenance/maintenance.routes.js';
+import checklistsRoutes from './modules/checklists/checklists.routes.js';
 
 const app = express();
 
@@ -34,6 +36,8 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/machines', machinesRoutes);
 app.use('/api/v1/production', productionRoutes);
+app.use('/api/v1/maintenance', maintenanceRoutes);
+app.use('/api/v1/checklists', checklistsRoutes);
 
 // 404 handler
 app.use((req, res) => {
