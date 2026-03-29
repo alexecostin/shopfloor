@@ -2,6 +2,23 @@ import 'dotenv/config';
 
 /** @type {Object.<string, import('knex').Knex.Config>} */
 export default {
+  test: {
+    client: 'pg',
+    connection: {
+      host: process.env.DB_HOST || 'localhost',
+      port: Number(process.env.DB_PORT) || 5432,
+      database: process.env.DB_NAME || 'shopfloor',
+      user: process.env.DB_USER || 'shopfloor',
+      password: process.env.DB_PASSWORD || 'shopfloor_password',
+    },
+    migrations: {
+      directory: './migrations',
+      extension: 'js',
+    },
+    seeds: {
+      directory: './seeds',
+    },
+  },
   development: {
     client: 'pg',
     connection: {

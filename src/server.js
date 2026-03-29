@@ -2,11 +2,12 @@ import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import rateLimit from 'express-rate-limit';
+import { globalLimiter } from './middleware/rateLimiter.js';
+import errorHandler from './middleware/errorHandler.js';
 import logger from './config/logger.js';
+import authRoutes from './modules/auth/auth.routes.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
 
 // Security middleware
 app.use(helmet());
@@ -20,13 +21,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Global rate limiter
-const globalLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100,
-  message: { error: 'PREA_MULTE_CERERI', message: 'Prea multe cereri. Incearca din nou peste un minut.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 app.use(globalLimiter);
 
 // Health check
@@ -34,26 +28,23 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Error handler middleware
-app.use((err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
-  logger.error(err.message, { stack: err.stack, path: req.path, method: req.method });
-
-  res.status(statusCode).json({
-    statusCode,
-    error: err.code || 'EROARE_INTERNA',
-    message: err.message || 'A aparut o eroare interna.',
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
-  });
-});
+// Routes
+app.use('/api/v1/auth', authRoutes);
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ statusCode: 404, error: 'NU_GASIT', message: 'Ruta nu exista.' });
 });
 
-app.listen(PORT, () => {
-  logger.info(`Server pornit pe portul ${PORT}`, { env: process.env.NODE_ENV });
-});
+// Error handler (must be last)
+app.use(errorHandler);
 
 export default app;
+
+// Only start server when run directly (not imported in tests)
+if (process.argv[1] && process.argv[1].endsWith('server.js')) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    logger.info(`Server pornit pe portul ${PORT}`, { env: process.env.NODE_ENV });
+  });
+}
