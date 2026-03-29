@@ -435,3 +435,13 @@ services/production-service/
 ├── package.json
 └── Dockerfile
 ```
+
+---
+
+## REGULA GIT
+Dupa fiecare task finalizat si verificat, ruleaza:
+```bash
+git add .
+git commit -m "[descriere task]"
+git push origin main
+```
