@@ -2,10 +2,11 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   LayoutDashboard, Cpu, ClipboardList, Wrench,
-  CheckSquare, Users, LogOut, Menu, X
+  CheckSquare, Users, LogOut, Menu, X, WifiOff, Package, Building2, Calendar
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { useOnlineStatus, usePendingCount } from '../hooks/useOffline'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin','production_manager','shift_leader','operator','maintenance'] },
@@ -13,6 +14,10 @@ const NAV = [
   { to: '/production', label: 'Productie', icon: ClipboardList, roles: ['admin','production_manager','shift_leader','operator'] },
   { to: '/maintenance', label: 'Mentenanta', icon: Wrench, roles: ['admin','production_manager','maintenance'] },
   { to: '/checklists', label: 'Checklists', icon: CheckSquare, roles: ['admin','production_manager','shift_leader','operator'] },
+  { to: '/bom', label: 'BOM', icon: Package, roles: ['admin','production_manager'] },
+  { to: '/planning', label: 'Planning', icon: Calendar, roles: ['admin','production_manager'] },
+  { to: '/inventory', label: 'Stocuri', icon: Package, roles: ['admin','production_manager','shift_leader'] },
+  { to: '/companies', label: 'Companii', icon: Building2, roles: ['admin','production_manager'] },
   { to: '/users', label: 'Utilizatori', icon: Users, roles: ['admin','production_manager'] },
 ]
 
@@ -20,6 +25,17 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const online = useOnlineStatus()
+  const { count: pendingCount, refresh: refreshPending } = usePendingCount()
+
+  useEffect(() => {
+    const handler = (e) => {
+      toast.success(`${e.detail.count} rapoarte sincronizate!`)
+      refreshPending()
+    }
+    window.addEventListener('sw-sync-done', handler)
+    return () => window.removeEventListener('sw-sync-done', handler)
+  }, [refreshPending])
 
   function handleLogout() {
     logout()
@@ -30,7 +46,16 @@ export default function Layout({ children }) {
   const links = NAV.filter((n) => n.roles.includes(user?.role))
 
   return (
-    <div className="flex h-screen bg-slate-100">
+    <div className="flex h-screen bg-slate-100 flex-col">
+      {/* Offline banner */}
+      {!online && (
+        <div className="flex items-center justify-center gap-2 bg-red-500 text-white text-xs py-1.5 px-4">
+          <WifiOff size={13} />
+          Offline — Datele se vor sincroniza la reconectare
+          {pendingCount > 0 && <span className="bg-white text-red-500 rounded-full px-2 font-bold ml-1">{pendingCount}</span>}
+        </div>
+      )}
+      <div className="flex flex-1 min-h-0">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-56 bg-slate-900 text-white flex flex-col transform transition-transform duration-200
         ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:flex`}>
@@ -80,11 +105,17 @@ export default function Layout({ children }) {
             <Menu size={20} />
           </button>
           <span className="font-semibold text-slate-800">ShopFloor.ro</span>
+          {pendingCount > 0 && (
+            <span className="ml-auto text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+              {pendingCount} nesincronizat{pendingCount > 1 ? 'e' : ''}
+            </span>
+          )}
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {children}
         </main>
+      </div>
       </div>
     </div>
   )

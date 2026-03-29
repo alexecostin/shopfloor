@@ -1,4 +1,6 @@
 import * as service from './production.service.js';
+import { sendNotification } from '../../services/email.service.js';
+import db from '../../config/db.js';
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (err) { next(err); } };
 
@@ -34,7 +36,10 @@ export const listStops = wrap(async (req, res) => {
 });
 
 export const createStop = wrap(async (req, res) => {
-  res.status(201).json(await service.createStop(req.body, req.user.userId));
+  const stop = await service.createStop(req.body, req.user.userId);
+  res.status(201).json(stop);
+  const machine = await db('machines.machines').where({ id: stop.machine_id }).first().catch(() => null);
+  sendNotification({ type: 'machine_stop', data: { machineCode: machine?.code || '?', reason: stop.reason, category: stop.category } }).catch(() => {});
 });
 
 export const closeStop = wrap(async (req, res) => {

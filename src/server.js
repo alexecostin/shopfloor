@@ -10,6 +10,12 @@ import machinesRoutes from './modules/machines/machines.routes.js';
 import productionRoutes from './modules/production/production.routes.js';
 import maintenanceRoutes from './modules/maintenance/maintenance.routes.js';
 import checklistsRoutes from './modules/checklists/checklists.routes.js';
+import bomRoutes from './modules/bom/bom.routes.js';
+import planningRoutes from './modules/planning/planning.routes.js';
+import inventoryRoutes from './modules/inventory/inventory.routes.js';
+import companiesRoutes from './modules/companies/companies.routes.js';
+import importRoutes from './modules/import/import.routes.js';
+import exportRoutes from './modules/export/export.routes.js';
 
 const app = express();
 
@@ -38,6 +44,12 @@ app.use('/api/v1/machines', machinesRoutes);
 app.use('/api/v1/production', productionRoutes);
 app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use('/api/v1/checklists', checklistsRoutes);
+app.use('/api/v1/bom', bomRoutes);
+app.use('/api/v1/planning', planningRoutes);
+app.use('/api/v1/inventory', inventoryRoutes);
+app.use('/api/v1/companies', companiesRoutes);
+app.use('/api/v1/import', importRoutes);
+app.use('/api/v1/export', exportRoutes);
 
 // 404 handler
 app.use((req, res) => {

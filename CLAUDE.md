@@ -436,12 +436,125 @@ services/production-service/
 └── Dockerfile
 ```
 
----
-
 ## REGULA GIT
 Dupa fiecare task finalizat si verificat, ruleaza:
-```bash
 git add .
 git commit -m "[descriere task]"
 git push origin main
+
+# ═══════════════════════════════════════════
+# ADAUGA ACEST BLOC LA SFARSITUL FISIERULUI CLAUDE.md
+# ═══════════════════════════════════════════
+
+## RELATII INTRE MODULE
+
 ```
+COMPANIES (clienti/furnizori)
+    │
+    ▼
+BOM.PRODUCTS (catalog repere, referinta client)
+    │
+    ├── BOM.OPERATIONS (routing: secventa operatii per produs)
+    │       └── leaga la MACHINES (machine_type sau machine_id)
+    │
+    ├── BOM.MATERIALS (ce materiale intra in produs)
+    │       └── leaga la INVENTORY.ITEMS (prin material_name/code)
+    │
+    └── BOM.ASSEMBLY_COMPONENTS (ce semifabricate compun produsul)
+            └── leaga la alte BOM.PRODUCTS
+
+PLANNING.CUSTOMER_DEMANDS (call-offs de la client)
+    │
+    ▼
+PLANNING.MASTER_PLANS (plan saptamanal)
+    │
+    ▼
+PLANNING.DAILY_ALLOCATIONS (reper pe masina pe zi pe tura)
+    │
+    ├── leaga la MACHINES.MACHINES (machine_id)
+    ├── leaga la BOM.PRODUCTS (product_id)
+    ├── leaga la PRODUCTION.ORDERS (order_id)
+    └── actualizeaza PLANNING.CAPACITY_LOAD (% incarcare masina)
+
+PRODUCTION.ORDERS (comenzi de productie)
+    │
+    ├── PRODUCTION.REPORTS (piese raportate de operator)
+    ├── PRODUCTION.STOPS (opriri masini)
+    └── se compara cu PLANNING.DAILY_ALLOCATIONS (planificat vs realizat)
+
+INVENTORY.ITEMS (articole de stoc)
+    │
+    ├── INVENTORY.STOCK_LEVELS (stoc curent, actualizat la fiecare miscare)
+    ├── INVENTORY.MOVEMENTS (jurnal: intrari, iesiri, ajustari)
+    ├── INVENTORY.WAREHOUSE_DOCUMENTS (NIR, BC → genereaza movements la confirmare)
+    └── INVENTORY.MATERIAL_REQUIREMENTS (calculat din ORDERS + BOM.MATERIALS)
+```
+
+## BUSINESS RULES — MODULE NOI
+
+### BOM
+- Un produs poate avea mai multe operatii (sequence: 10, 20, 30...)
+- Fiecare operatie are un tip de masina necesar (machine_type) — NU o masina fixa
+- pieces_per_hour se calculeaza automat: (3600 / cycle_time_seconds) * nr_cavities
+- weight_runner_kg = masa culee/runner care se recicleaza (specific injectie plastic)
+- cost_per_piece = SUM(material costs) + SUM(operation costs) + overhead %
+- Cand se modifica BOM-ul, costul NU se recalculeaza automat — doar la cerere (GET /cost)
+
+### Planning
+- Un master_plan acopera o saptamana (luni-duminica) sau o luna
+- daily_allocations: un reper pe o masina pe o tura pe o zi = un rand
+- Cand se adauga/modifica/sterge o alocare → RECALCULEAZA capacity_load:
+  planned_hours = SUM(planned_hours) din toate alocarile pt masina+data
+  load_percent = (planned_hours / available_hours) * 100
+  available_hours vine din machines.planned_production_minutes / 60 * nr_ture
+- Daca load_percent > 100% → masina e SUPRAINCARCATA (avertizare in dashboard)
+- customer_demands = cerinte de la client (call-offs), importate din Excel sau manual
+- Alocarea NU se face automat — managerul aloca manual repere pe masini
+
+### Inventory
+- La creare item → se creeaza automat stock_levels cu qty=0
+- Orice miscare (movement) actualizeaza stock_levels in TRANZACTIE:
+  - Daca qty finala ar fi negativa → REJECT (stoc insuficient)
+  - receipt/production_output/adjustment_plus → qty pozitiv (creste stoc)
+  - production_input/shipment/scrap/adjustment_minus → qty negativ (scade stoc)
+- Warehouse documents: draft → confirmed
+  - La confirmare se creeaza automat movements pentru fiecare linie
+  - Un document confirmat NU poate fi modificat
+- material_requirements se calculeaza din: orders.target_quantity × bom.materials.qty_per_piece × waste_factor
+  - shortage = required - stock_levels.current_qty (daca > 0)
+
+### Companies
+- company_type 'both' = e si client si furnizor
+- Un contact cu is_primary=true = contactul principal pentru acea companie
+- companies se leaga de bom.products prin client_name (nu FK strict)
+- companies se leaga de inventory.items prin supplier_name (nu FK strict)
+
+## SEED DATA SPECIFICE (din fisierele Alseca/CPD)
+
+Cand creezi seed pentru module noi, foloseste aceste date reale:
+
+Produse (bom.products):
+- A4638840900 FR | RADLAUFABDECKUNG VO LI | FR | Mercedes-Benz | MOPLEN | 0.925 kg | 30/container
+- A4638841000 FR | RADLAUFABDECKUNG VO RE | FR | Mercedes-Benz | MOPLEN | 0.911 kg | 30/container
+- A4638841300 FR | RADLAUFABDECKUNG HI LI | FR | Mercedes-Benz | MOPLEN | 0.878 kg | 90/container
+- A4638841400 FR | RADLAUFABDECKUNG HI RE | FR | Mercedes-Benz | MOPLEN | 0.860 kg | 90/container
+- A4638842700 FR | RADLAUFABDECKUNG VO LI AMG | FR | Mercedes-Benz | MOPLEN | 0.920 kg | 30/container
+
+Masini:
+- INJ-1700TF | Masina Injectie 1700 TF | Injectie | Hala B
+- INJ-M1-350TF | Masina Injectie M1 350 TF | Injectie | Hala B
+- INJ-M2-350TF | Masina Injectie M2 350 TF | Injectie | Hala B
+- INJ-140TF | Masina Injectie 140 TF | Injectie | Hala B
+- ASM-01 | Linie Asamblare 1 | Asamblare | Hala C
+
+Operatii tipice (bom.operations):
+- Seq 10: Uscare material | drying | 0 min ciclu (pregatire)
+- Seq 20: Montaj matrita | mold_change | setup_time: 60-120 min
+- Seq 30: Injectie | injection | cycle_time: 51-59 sec | nr_cavities: 1
+- Seq 40: Asamblare | assembly | cycle_time: variabil
+
+Materiale (bom.materials):
+- MOPLEN EP340K | granule polipropilena | ~1 kg/piesa | furnizor: LyondellBasell
+- ZYTEL 70G30HSLR BK099 | granule nylon | furnizor: DuPont
+- ARMLEN | granule | furnizor: LyondellBasell
+- Eticheta trasabilitate | buc | 1/piesa
