@@ -7,6 +7,7 @@ import errorHandler from './middleware/errorHandler.js';
 import logger from './config/logger.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import machinesRoutes from './modules/machines/machines.routes.js';
+import productionRoutes from './modules/production/production.routes.js';
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/machines', machinesRoutes);
+app.use('/api/v1/production', productionRoutes);
 
 // 404 handler
 app.use((req, res) => {
