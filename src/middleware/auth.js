@@ -18,8 +18,16 @@ export function authenticate(req, res, next) {
     req.user = {
       userId: decoded.userId,
       email: decoded.email,
-      role: decoded.role,
+      role: decoded.role,           // legacy
       fullName: decoded.fullName,
+      // New multi-tenant / RBAC fields (present only in enriched tokens)
+      tenantId: decoded.tenantId,
+      roles: decoded.roles,
+      permissions: decoded.permissions,
+      scopes: decoded.scopes,
+      activeModules: decoded.activeModules,
+      tier: decoded.tier,
+      licenseStatus: decoded.licenseStatus,
     };
     next();
   } catch {

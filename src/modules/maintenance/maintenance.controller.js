@@ -6,13 +6,13 @@ const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } cat
 
 export const list = wrap(async (req, res) => {
   const { status, machineId, assignedTo, priority, page, limit } = req.query;
-  res.json(await service.listRequests({ status, machineId, assignedTo, priority, page: +page || 1, limit: +limit || 50 }));
+  res.json(await service.listRequests({ status, machineId, assignedTo, priority, page: +page || 1, limit: +limit || 50 }, req));
 });
 
 export const get = wrap(async (req, res) => res.json(await service.getRequest(req.params.id)));
 
 export const create = wrap(async (req, res) => {
-  const request = await service.createRequest(req.body, req.user.userId);
+  const request = await service.createRequest(req.body, req.user.userId, req);
   res.status(201).json(request);
   const machine = await db('machines.machines').where({ id: request.machine_id }).first().catch(() => null);
   sendNotification({ type: 'maintenance_new', data: { priority: request.priority, machineCode: machine?.code || '?', problemType: request.problem_type, requestNumber: request.request_number, description: request.description } }).catch(() => {});

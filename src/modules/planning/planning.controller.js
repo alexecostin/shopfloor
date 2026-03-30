@@ -1,4 +1,5 @@
 import * as svc from './planning.service.js';
+import * as replanSvc from '../../services/replan.service.js';
 
 export const getMasterPlans = async (req, res, next) => {
   try { res.json(await svc.listMasterPlans(req.query)); } catch (e) { next(e); }
@@ -87,4 +88,12 @@ export const getDashboard = async (req, res, next) => {
     const weekStart = req.query.weekStart || new Date().toISOString().split('T')[0];
     res.json(await svc.getDashboard(weekStart));
   } catch (e) { next(e); }
+};
+
+export const approveReplan = async (req, res, next) => {
+  try { res.json(await replanSvc.approveReplan(req.params.id, req.user.userId)); } catch (e) { next(e); }
+};
+
+export const rejectReplan = async (req, res, next) => {
+  try { res.json(await replanSvc.rejectReplan(req.params.id, req.user.userId, req.body.reason)); } catch (e) { next(e); }
 };

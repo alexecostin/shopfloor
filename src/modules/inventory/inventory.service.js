@@ -1,5 +1,7 @@
 import db from '../../config/db.js';
 import { sendNotification } from '../../services/email.service.js';
+import { createPurchaseHistoryFromMovement } from './item-suppliers.service.js';
+import { escapeLike } from '../../utils/sanitize.js';
 
 // Movement sign determination
 const POSITIVE_TYPES = new Set(['receipt', 'production_output', 'adjustment_plus', 'return_supplier']);
@@ -34,7 +36,7 @@ export async function listItems({ page = 1, limit = 50, category, search, belowM
       db.raw('COALESCE(sl.current_qty, 0) - COALESCE(sl.reserved_qty, 0) AS available_qty'))
     .orderBy('i.name');
   if (category) q = q.where('i.category', category);
-  if (search) q = q.where((b) => b.where('i.code', 'ilike', `%${search}%`).orWhere('i.name', 'ilike', `%${search}%`));
+  if (search) q = q.where((b) => b.where('i.code', 'ilike', `%${escapeLike(search)}%`).orWhere('i.name', 'ilike', `%${escapeLike(search)}%`));
   if (belowMin === 'true' || belowMin === true) q = q.whereRaw('COALESCE(sl.current_qty, 0) <= i.min_stock');
   const [{ count }] = await q.clone().count('i.id as count');
   const data = await q.limit(limit).offset(offset);
@@ -155,6 +157,17 @@ export async function createMovement(data, userId) {
       sendNotification({ type: 'stock_low', data: { itemName: item.name, currentQty: newQty, minStock: item.min_stock } }).catch(() => {});
     }
 
+    // Record purchase history for receipts
+    if (data.movementType === 'receipt') {
+      createPurchaseHistoryFromMovement({
+        ...movement,
+        type: 'receipt',
+        quantity: data.qty,
+        supplier_company_id: data.supplierCompanyId || null,
+        tenant_id: data.tenantId || null,
+      }).catch(() => {});
+    }
+
     return movement;
   });
 }
@@ -228,7 +241,7 @@ export async function getDocument(id) {
 
 async function nextDocNumber(trx, docType) {
   const { prefix, seq } = DOC_PREFIXES[docType] || { prefix: 'DOC', seq: 'inventory.nir_seq' };
-  const [{ nextval }] = await trx.raw(`SELECT nextval('${seq}')`);
+  const [{ nextval }] = await trx.raw('SELECT nextval(?::regclass)', [seq]);
   return `${prefix}-${String(nextval).padStart(5, '0')}`;
 }
 

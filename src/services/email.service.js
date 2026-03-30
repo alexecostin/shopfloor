@@ -1,5 +1,6 @@
 import { resend, EMAIL_FROM, NOTIFICATIONS_ENABLED, logger } from '../config/email.js';
 import db from '../config/db.js';
+import { getTemplate, renderTemplate } from './email-templates.service.js';
 
 export async function sendEmail({ to, subject, html }) {
   if (!NOTIFICATIONS_ENABLED) {
@@ -32,19 +33,19 @@ export async function sendNotification({ type, data }) {
       if (!['high', 'critical'].includes(priority)) return;
       const to = await getUsersByRole(['maintenance']);
       if (!to.length) return;
-      await sendEmail({
-        to,
-        subject: `[URGENT] Cerere mentenanta: ${machineCode} — ${problemType}`,
-        html: `
-          <h2>Cerere noua mentenanta — ${requestNumber}</h2>
-          <p><b>Masina:</b> ${machineCode}</p>
-          <p><b>Problema:</b> ${problemType}</p>
-          <p><b>Prioritate:</b> ${priority.toUpperCase()}</p>
-          ${description ? `<p><b>Descriere:</b> ${description}</p>` : ''}
-          <hr/>
-          <p><small>ShopFloor.ro — Sistem de gestiune productie</small></p>
-        `,
-      });
+      const tenantId = data.tenantId || null;
+      const tpl = await getTemplate(tenantId, 'maintenance_new', 'ro');
+      if (tpl) {
+        const { subject, body_html } = renderTemplate(tpl, { machineCode, problemType, requestNumber, priority, description: description || '' });
+        await sendEmail({ to, subject, html: body_html });
+      } else {
+        // fallback inline
+        await sendEmail({
+          to,
+          subject: `[URGENT] Cerere mentenanta: ${machineCode} — ${problemType}`,
+          html: `<h2>Cerere noua mentenanta — ${requestNumber}</h2><p>${machineCode} / ${problemType} / ${priority}</p>`,
+        });
+      }
       break;
     }
 
@@ -53,17 +54,19 @@ export async function sendNotification({ type, data }) {
       if (category !== 'Defect utilaj') return;
       const to = await getUsersByRole(['production_manager']);
       if (!to.length) return;
-      await sendEmail({
-        to,
-        subject: `Oprire masina: ${machineCode} — ${reason}`,
-        html: `
-          <h2>Masina oprita: ${machineCode}</h2>
-          <p><b>Motiv:</b> ${reason}</p>
-          <p><b>Categorie:</b> ${category}</p>
-          <hr/>
-          <p><small>ShopFloor.ro</small></p>
-        `,
-      });
+      const tenantId = data.tenantId || null;
+      const tpl = await getTemplate(tenantId, 'machine_stop', 'ro');
+      if (tpl) {
+        const { subject, body_html } = renderTemplate(tpl, { machineCode, reason, category });
+        await sendEmail({ to, subject, html: body_html });
+      } else {
+        // fallback inline
+        await sendEmail({
+          to,
+          subject: `Oprire masina: ${machineCode} — ${reason}`,
+          html: `<h2>Masina oprita: ${machineCode}</h2><p><b>Motiv:</b> ${reason}</p><p><b>Categorie:</b> ${category}</p><hr/><p><small>ShopFloor.ro</small></p>`,
+        });
+      }
       break;
     }
 
@@ -71,18 +74,19 @@ export async function sendNotification({ type, data }) {
       const { itemName, currentQty, minStock } = data;
       const to = await getUsersByRole(['production_manager']);
       if (!to.length) return;
-      await sendEmail({
-        to,
-        subject: `ALERTA STOC: ${itemName} — ${currentQty}/${minStock}`,
-        html: `
-          <h2>Alerta stoc minim</h2>
-          <p><b>Articol:</b> ${itemName}</p>
-          <p><b>Stoc curent:</b> ${currentQty}</p>
-          <p><b>Stoc minim:</b> ${minStock}</p>
-          <hr/>
-          <p><small>ShopFloor.ro</small></p>
-        `,
-      });
+      const tenantId = data.tenantId || null;
+      const tpl = await getTemplate(tenantId, 'stock_low', 'ro');
+      if (tpl) {
+        const { subject, body_html } = renderTemplate(tpl, { itemName, currentQty, minStock });
+        await sendEmail({ to, subject, html: body_html });
+      } else {
+        // fallback inline
+        await sendEmail({
+          to,
+          subject: `ALERTA STOC: ${itemName} — ${currentQty}/${minStock}`,
+          html: `<h2>Alerta stoc minim</h2><p><b>Articol:</b> ${itemName}</p><p><b>Stoc curent:</b> ${currentQty}</p><p><b>Stoc minim:</b> ${minStock}</p><hr/><p><small>ShopFloor.ro</small></p>`,
+        });
+      }
       break;
     }
 
@@ -91,17 +95,20 @@ export async function sendNotification({ type, data }) {
       if (oee >= 0.6) return;
       const to = await getUsersByRole(['production_manager']);
       if (!to.length) return;
-      await sendEmail({
-        to,
-        subject: `OEE scazut: ${machineCode} — ${Math.round(oee * 100)}%`,
-        html: `
-          <h2>OEE sub 60%: ${machineCode}</h2>
-          <p><b>OEE:</b> ${Math.round(oee * 100)}%</p>
-          <p>Verificati motivele de oprire si rebuturile pentru aceasta masina.</p>
-          <hr/>
-          <p><small>ShopFloor.ro</small></p>
-        `,
-      });
+      const tenantId = data.tenantId || null;
+      const oeePercent = Math.round(oee * 100);
+      const tpl = await getTemplate(tenantId, 'oee_low', 'ro');
+      if (tpl) {
+        const { subject, body_html } = renderTemplate(tpl, { machineCode, oeePercent });
+        await sendEmail({ to, subject, html: body_html });
+      } else {
+        // fallback inline
+        await sendEmail({
+          to,
+          subject: `OEE scazut: ${machineCode} — ${oeePercent}%`,
+          html: `<h2>OEE sub 60%: ${machineCode}</h2><p><b>OEE:</b> ${oeePercent}%</p><p>Verificati motivele de oprire si rebuturile pentru aceasta masina.</p><hr/><p><small>ShopFloor.ro</small></p>`,
+        });
+      }
       break;
     }
 

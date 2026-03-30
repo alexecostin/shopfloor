@@ -1,14 +1,16 @@
 import db from '../../config/db.js';
+import * as shiftService from '../../services/shift.service.js';
+import { escapeLike } from '../../utils/sanitize.js';
 
 // ─── Master Plans ─────────────────────────────────────────────────────────────
 
 export async function listMasterPlans({ page = 1, limit = 20, status, year } = {}) {
   const offset = (page - 1) * limit;
-  let q = db('planning.master_plans').orderBy('start_date', 'desc');
+  let q = db('planning.master_plans');
   if (status) q = q.where('status', status);
   if (year) q = q.where('year', year);
   const [{ count }] = await q.clone().count('* as count');
-  const data = await q.limit(limit).offset(offset);
+  const data = await q.clone().orderBy('start_date', 'desc').limit(limit).offset(offset);
   return { data, total: Number(count), page, limit };
 }
 
@@ -56,7 +58,11 @@ async function recalculateCapacity(machineId, planDate, masterPlanId) {
     .sum('planned_hours as total');
 
   const plannedHours = Number(total) || 0;
-  const availableHours = 16;
+  let availableHours = 16; // fallback
+  try {
+    const { totalHours } = await shiftService.getAvailableHours(machineId, planDate);
+    if (totalHours > 0) availableHours = totalHours;
+  } catch (_) { /* keep fallback */ }
   const loadPercent = (plannedHours / availableHours) * 100;
 
   await db('planning.capacity_load')
@@ -157,7 +163,7 @@ export async function listDemands({ status, dateFrom, dateTo, productReference }
   if (status) q = q.where('status', status);
   if (dateFrom) q = q.where('demand_date', '>=', dateFrom);
   if (dateTo) q = q.where('demand_date', '<=', dateTo);
-  if (productReference) q = q.where('product_reference', 'ilike', `%${productReference}%`);
+  if (productReference) q = q.where('product_reference', 'ilike', `%${escapeLike(productReference)}%`);
   return q;
 }
 

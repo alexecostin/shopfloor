@@ -36,7 +36,21 @@ export const deleteCompany = async (req, res, next) => {
 };
 
 export const getContacts = async (req, res, next) => {
-  try { res.json(await svc.listContacts(req.params.companyId)); } catch (e) { next(e); }
+  try { res.json(await svc.listContacts(req.params.companyId, req.query)); } catch (e) { next(e); }
+};
+
+export const assignContact = async (req, res, next) => {
+  try {
+    const assignment = await svc.assignContact(req.body, req.user?.id);
+    res.status(201).json(assignment);
+  } catch (e) { next(e); }
+};
+
+export const getContactsForEntity = async (req, res, next) => {
+  try {
+    const contacts = await svc.getContactsForEntity(req.params.entityType, req.params.entityId);
+    res.json(contacts);
+  } catch (e) { next(e); }
 };
 
 export const postContact = async (req, res, next) => {

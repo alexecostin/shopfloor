@@ -1,10 +1,20 @@
 import db from '../../config/db.js';
+import { applyScopeFilter } from '../../middleware/scopeFilter.js';
+import * as shiftService from '../../services/shift.service.js';
+
+function extractTenant(req) {
+  return {
+    tenant_id: req?.tenantFilter?.tenantId || null,
+    org_unit_id: req?.user?.scopes?.[0]?.orgUnitId || null,
+  };
+}
 
 // ── ORDERS ───────────────────────────────────────────────────────────────────
 
-export async function listOrders({ status, machineId, page = 1, limit = 50 } = {}) {
+export async function listOrders({ status, machineId, page = 1, limit = 50 } = {}, req = null) {
   const offset = (page - 1) * limit;
   let query = db('production.orders');
+  applyScopeFilter(query, req);
   if (status) query = query.where({ status });
   if (machineId) query = query.where({ machine_id: machineId });
 
@@ -19,7 +29,7 @@ export async function getOrder(id) {
   return order;
 }
 
-export async function createOrder({ orderNumber, productName, productCode, machineId, targetQuantity, status }) {
+export async function createOrder({ orderNumber, productName, productCode, machineId, targetQuantity, status }, req = null) {
   const existing = await db('production.orders').where({ order_number: orderNumber }).first();
   if (existing) throw conflict(`Exista deja o comanda cu numarul "${orderNumber}".`, 'NUMAR_DUPLICAT');
 
@@ -30,6 +40,7 @@ export async function createOrder({ orderNumber, productName, productCode, machi
     machine_id: machineId,
     target_quantity: targetQuantity,
     status: status || 'active',
+    ...extractTenant(req),
   }).returning('*');
   return order;
 }
@@ -48,9 +59,10 @@ export async function updateOrder(id, fields) {
 
 // ── REPORTS ──────────────────────────────────────────────────────────────────
 
-export async function listReports({ machineId, operatorId, shift, dateFrom, dateTo, page = 1, limit = 50 } = {}) {
+export async function listReports({ machineId, operatorId, shift, dateFrom, dateTo, page = 1, limit = 50 } = {}, req = null) {
   const offset = (page - 1) * limit;
   let query = db('production.reports');
+  applyScopeFilter(query, req);
   if (machineId) query = query.where({ machine_id: machineId });
   if (operatorId) query = query.where({ operator_id: operatorId });
   if (shift) query = query.where({ shift });
@@ -62,7 +74,7 @@ export async function listReports({ machineId, operatorId, shift, dateFrom, date
   return { data: reports, pagination: { page, limit, total: Number(count), pages: Math.ceil(count / limit) } };
 }
 
-export async function createReport({ orderId, machineId, shift, goodPieces, scrapPieces, scrapReason, notes }, operatorId) {
+export async function createReport({ orderId, machineId, shift, goodPieces, scrapPieces, scrapReason, notes }, operatorId, req = null) {
   const [report] = await db('production.reports').insert({
     order_id: orderId || null,
     machine_id: machineId,
@@ -72,15 +84,17 @@ export async function createReport({ orderId, machineId, shift, goodPieces, scra
     scrap_pieces: scrapPieces || 0,
     scrap_reason: scrapReason || null,
     notes: notes || null,
+    ...extractTenant(req),
   }).returning('*');
   return report;
 }
 
 // ── STOPS ────────────────────────────────────────────────────────────────────
 
-export async function listStops({ machineId, shift, open, page = 1, limit = 50 } = {}) {
+export async function listStops({ machineId, shift, open, page = 1, limit = 50 } = {}, req = null) {
   const offset = (page - 1) * limit;
   let query = db('production.stops');
+  applyScopeFilter(query, req);
   if (machineId) query = query.where({ machine_id: machineId });
   if (shift) query = query.where({ shift });
   if (open === true) query = query.whereNull('ended_at');
@@ -91,7 +105,7 @@ export async function listStops({ machineId, shift, open, page = 1, limit = 50 }
   return { data: stops, pagination: { page, limit, total: Number(count), pages: Math.ceil(count / limit) } };
 }
 
-export async function createStop({ machineId, reason, category, shift, notes }, operatorId) {
+export async function createStop({ machineId, reason, category, shift, notes }, operatorId, req = null) {
   const [stop] = await db('production.stops').insert({
     machine_id: machineId,
     operator_id: operatorId,
@@ -99,6 +113,7 @@ export async function createStop({ machineId, reason, category, shift, notes }, 
     category: category || null,
     shift: shift || null,
     notes: notes || null,
+    ...extractTenant(req),
   }).returning('*');
   return stop;
 }
@@ -121,9 +136,10 @@ export async function closeStop(id, { notes } = {}) {
 
 // ── SHIFTS ───────────────────────────────────────────────────────────────────
 
-export async function listShifts({ date, status, page = 1, limit = 20 } = {}) {
+export async function listShifts({ date, status, page = 1, limit = 20 } = {}, req = null) {
   const offset = (page - 1) * limit;
   let query = db('production.shifts');
+  applyScopeFilter(query, req);
   if (date) query = query.where({ date });
   if (status) query = query.where({ status });
 
@@ -132,13 +148,14 @@ export async function listShifts({ date, status, page = 1, limit = 20 } = {}) {
   return { data: shifts, pagination: { page, limit, total: Number(count), pages: Math.ceil(count / limit) } };
 }
 
-export async function createShift({ shiftName, date, notesIncoming }, shiftLeaderId) {
+export async function createShift({ shiftName, date, notesIncoming }, shiftLeaderId, req = null) {
   const [shift] = await db('production.shifts').insert({
     shift_name: shiftName,
     shift_leader_id: shiftLeaderId,
     date: date || new Date().toISOString().slice(0, 10),
     notes_incoming: notesIncoming || null,
     status: 'active',
+    ...extractTenant(req),
   }).returning('*');
   return shift;
 }
@@ -159,7 +176,14 @@ export async function closeShift(id, { notesOutgoing } = {}) {
 // ── OEE ──────────────────────────────────────────────────────────────────────
 
 export async function getOEE({ machineId, date, shift } = {}) {
-  const shiftDuration = 480; // 8h in minutes
+  // Get planned production time from shift config
+  let shiftDuration = 480; // fallback
+  if (machineId && date) {
+    try {
+      const { totalHours } = await shiftService.getAvailableHours(machineId, date);
+      if (totalHours > 0) shiftDuration = totalHours * 60;
+    } catch (_) { /* keep fallback */ }
+  }
 
   let reportsQuery = db('production.reports').where({ machine_id: machineId });
   let stopsQuery = db('production.stops').where({ machine_id: machineId }).whereNotNull('ended_at');

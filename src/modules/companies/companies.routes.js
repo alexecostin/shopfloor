@@ -16,6 +16,8 @@ router.post('/', mgr, validate(v.createCompany), c.postCompany);
 router.put('/:id', mgr, validate(v.updateCompany), c.putCompany);
 router.delete('/:id', adm, c.deleteCompany);
 
+router.post('/contacts/assign', mgr, c.assignContact);
+router.get('/contacts/for/:entityType/:entityId', c.getContactsForEntity);
 router.get('/:companyId/contacts', c.getContacts);
 router.post('/:companyId/contacts', mgr, validate(v.createContact), c.postContact);
 router.put('/contacts/:id', mgr, validate(v.updateContact), c.putContact);

@@ -2,11 +2,13 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   LayoutDashboard, Cpu, ClipboardList, Wrench,
-  CheckSquare, Users, LogOut, Menu, X, WifiOff, Package, Building2, Calendar
+  CheckSquare, Users, LogOut, Menu, X, WifiOff, Package, Building2, Calendar, FileText,
+  Shield, Bell, DollarSign, BarChart2, Upload, Settings, CheckCircle
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { useOnlineStatus, usePendingCount } from '../hooks/useOffline'
+import { useApprovalPendingCount } from './ApprovalQueue'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin','production_manager','shift_leader','operator','maintenance'] },
@@ -18,7 +20,16 @@ const NAV = [
   { to: '/planning', label: 'Planning', icon: Calendar, roles: ['admin','production_manager'] },
   { to: '/inventory', label: 'Stocuri', icon: Package, roles: ['admin','production_manager','shift_leader'] },
   { to: '/companies', label: 'Companii', icon: Building2, roles: ['admin','production_manager'] },
+  { to: '/work-orders', label: 'Comenzi Lucru', icon: FileText, roles: ['admin','production_manager','shift_leader'] },
+  { to: '/skill-matrix', label: 'Competente', icon: Shield, roles: ['admin','production_manager'] },
+  { to: '/tools', label: 'Scule', icon: Wrench, roles: ['admin','production_manager','maintenance'] },
+  { to: '/alerts', label: 'Alerte', icon: Bell, roles: ['admin','production_manager','shift_leader','maintenance'] },
+  { to: '/costs', label: 'Costuri', icon: DollarSign, roles: ['admin','production_manager'] },
+  { to: '/reports', label: 'Rapoarte', icon: BarChart2, roles: ['admin','production_manager','shift_leader'] },
+  { to: '/import', label: 'Import', icon: Upload, roles: ['admin','production_manager'] },
   { to: '/users', label: 'Utilizatori', icon: Users, roles: ['admin','production_manager'] },
+  { to: '/admin', label: 'Admin', icon: Settings, roles: ['admin'] },
+  { to: '/approvals', label: 'Aprobari', icon: CheckCircle, roles: ['admin','production_manager','shift_leader','maintenance'] },
 ]
 
 export default function Layout({ children }) {
@@ -27,6 +38,7 @@ export default function Layout({ children }) {
   const [open, setOpen] = useState(false)
   const online = useOnlineStatus()
   const { count: pendingCount, refresh: refreshPending } = usePendingCount()
+  const approvalCount = useApprovalPendingCount()
 
   useEffect(() => {
     const handler = (e) => {
@@ -55,6 +67,12 @@ export default function Layout({ children }) {
           {pendingCount > 0 && <span className="bg-white text-red-500 rounded-full px-2 font-bold ml-1">{pendingCount}</span>}
         </div>
       )}
+      {/* License grace warning banner */}
+      {user?.licenseStatus === 'grace' && (
+        <div className="flex items-center justify-center gap-2 bg-amber-500 text-white text-xs py-1.5 px-4">
+          ⚠️ Licenta expira curand — contactati administratorul pentru reinnoire
+        </div>
+      )}
       <div className="flex flex-1 min-h-0">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-56 bg-slate-900 text-white flex flex-col transform transition-transform duration-200
@@ -79,6 +97,9 @@ export default function Layout({ children }) {
             >
               <Icon size={16} />
               {label}
+              {to === '/approvals' && approvalCount > 0 && (
+                <span className="ml-auto bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{approvalCount}</span>
+              )}
             </NavLink>
           ))}
         </nav>

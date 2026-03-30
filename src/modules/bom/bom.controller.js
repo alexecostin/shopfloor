@@ -24,7 +24,10 @@ export const postProduct = async (req, res, next) => {
 
 export const putProduct = async (req, res, next) => {
   try {
-    const p = await svc.updateProduct(req.params.id, req.body);
+    const p = await svc.updateProduct(req.params.id, req.body, {
+      tenantId: req.user?.tenantId,
+      userId: req.user?.userId,
+    });
     if (!p) return res.status(404).json({ message: 'Produs negasit.' });
     res.json(p);
   } catch (e) { next(e); }
@@ -117,5 +120,33 @@ export const getProductCost = async (req, res, next) => {
     const cost = await svc.calculateCost(req.params.id);
     if (!cost) return res.status(404).json({ message: 'Produs negasit.' });
     res.json(cost);
+  } catch (e) { next(e); }
+};
+
+export const getProductDependencies = async (req, res, next) => {
+  try {
+    res.json(await svc.getProductDependencies(req.params.productId));
+  } catch (e) { next(e); }
+};
+
+export const addDependency = async (req, res, next) => {
+  try {
+    const r = await svc.addDependency(req.params.operationId, req.body);
+    res.status(201).json(r);
+  } catch (e) { next(e); }
+};
+
+export const removeDependency = async (req, res, next) => {
+  try {
+    await svc.removeDependency(req.params.id);
+    res.json({ message: 'Sters.' });
+  } catch (e) { next(e); }
+};
+
+export const getBackwardSchedule = async (req, res, next) => {
+  try {
+    const { deadline, quantity } = req.query;
+    if (!deadline || !quantity) return res.status(400).json({ message: 'deadline si quantity sunt obligatorii.' });
+    res.json(await svc.getBackwardSchedule(req.params.productId, deadline, quantity));
   } catch (e) { next(e); }
 };

@@ -33,4 +33,8 @@ router.post('/demands/bulk', mgr, validate(v.bulkDemands), c.postBulkDemands);
 // Dashboard
 router.get('/dashboard', c.getDashboard);
 
+// Replan approval
+router.put('/replan/:id/approve', mgr, c.approveReplan);
+router.put('/replan/:id/reject', mgr, c.rejectReplan);
+
 export default router;

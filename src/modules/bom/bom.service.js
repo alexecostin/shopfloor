@@ -1,16 +1,20 @@
 import db from '../../config/db.js';
+import { getDependencyTree, calculateBackwardSchedule } from '../../services/dependency.service.js';
+import { onDocumentModified } from '../../services/approval-engine.service.js';
+import { escapeLike } from '../../utils/sanitize.js';
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
-export async function listProducts({ page = 1, limit = 50, type, client, active, search } = {}) {
+export async function listProducts({ page = 1, limit = 50, type, client, active, search, approvedOnly } = {}) {
   const offset = (page - 1) * limit;
-  let q = db('bom.products').orderBy('reference');
+  let q = db('bom.products');
   if (type) q = q.where('product_type', type);
-  if (client) q = q.where('client_name', 'ilike', `%${client}%`);
+  if (client) q = q.where('client_name', 'ilike', `%${escapeLike(client)}%`);
   if (active !== undefined) q = q.where('is_active', active === 'true' || active === true);
-  if (search) q = q.where((b) => b.where('reference', 'ilike', `%${search}%`).orWhere('name', 'ilike', `%${search}%`));
+  if (search) q = q.where((b) => b.where('reference', 'ilike', `%${escapeLike(search)}%`).orWhere('name', 'ilike', `%${escapeLike(search)}%`));
+  if (approvedOnly === true || approvedOnly === 'true') q = q.where('approval_status', 'active');
   const [{ count }] = await q.clone().count('* as count');
-  const data = await q.limit(limit).offset(offset);
+  const data = await q.clone().orderBy('reference').limit(limit).offset(offset);
   return { data, total: Number(count), page, limit };
 }
 
@@ -45,7 +49,7 @@ export async function createProduct(data) {
   return product;
 }
 
-export async function updateProduct(id, data) {
+export async function updateProduct(id, data, { tenantId, userId } = {}) {
   const row = {};
   if (data.reference !== undefined) row.reference = data.reference;
   if (data.name !== undefined) row.name = data.name;
@@ -61,6 +65,8 @@ export async function updateProduct(id, data) {
   if (data.notes !== undefined) row.notes = data.notes;
   if (data.isActive !== undefined) row.is_active = data.isActive;
   row.updated_at = new Date();
+  // If this product is approved (active), modifying it resets it to draft and bumps version
+  await onDocumentModified('mbom', id, tenantId, userId);
   const [product] = await db('bom.products').where({ id }).update(row).returning('*');
   return product;
 }
@@ -156,6 +162,25 @@ export async function updateMaterial(id, data) {
 
 export async function deleteMaterial(id) {
   return db('bom.materials').where({ id }).delete();
+}
+
+// ─── Dependencies ─────────────────────────────────────────────────────────────
+
+export async function getProductDependencies(productId) {
+  return getDependencyTree(productId);
+}
+
+export async function addDependency(operationId, data) {
+  const [r] = await db('bom.operation_dependencies').insert({ operation_id: operationId, ...data }).returning('*');
+  return r;
+}
+
+export async function removeDependency(id) {
+  return db('bom.operation_dependencies').where('id', id).delete();
+}
+
+export async function getBackwardSchedule(productId, deadline, quantity) {
+  return calculateBackwardSchedule(productId, deadline, parseInt(quantity));
 }
 
 // ─── Assembly Components ─────────────────────────────────────────────────────

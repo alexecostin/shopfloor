@@ -28,7 +28,7 @@ export const updateTemplateSchema = Joi.object({
 export const completeChecklistSchema = Joi.object({
   templateId: Joi.string().uuid().required(),
   machineId: Joi.string().uuid().required(),
-  shift: Joi.string().valid('Tura I', 'Tura II', 'Tura III').optional(),
+  shift: Joi.string().min(1).max(50).optional(),
   responses: Joi.array().items(
     Joi.object({
       itemId: Joi.string().required(),

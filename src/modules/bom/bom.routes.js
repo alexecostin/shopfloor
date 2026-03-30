@@ -39,4 +39,10 @@ router.post('/cost-rates', adm, validate(v.createCostRate), c.postCostRate);
 // Cost Calculator
 router.get('/products/:id/cost', c.getProductCost);
 
+// Dependencies & Backward Scheduling
+router.get('/products/:productId/dependencies', c.getProductDependencies);
+router.post('/operations/:operationId/dependencies', mgr, c.addDependency);
+router.delete('/dependencies/:id', mgr, c.removeDependency);
+router.get('/products/:productId/backward-schedule', c.getBackwardSchedule);
+
 export default router;

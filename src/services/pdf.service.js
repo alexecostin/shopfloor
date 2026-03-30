@@ -181,6 +181,21 @@ export async function generateMaintenanceReport(requests, dateFrom, dateTo) {
   });
 }
 
+// ─── Generic Report PDF (stub) ────────────────────────────────────────────────
+
+export async function generateReportPDF(type, params) {
+  return new Promise(resolve => {
+    const doc = createDoc();
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    header(doc, `Raport: ${type}`, `Generat la ${formatDateTime(new Date())}`);
+    doc.fontSize(10).fillColor(TEXT).text(`Parametri: ${JSON.stringify(params)}`, 50, doc.y + 10);
+    footer(doc);
+    doc.end();
+  });
+}
+
 // ─── Inventory Report ─────────────────────────────────────────────────────────
 
 export async function generateInventoryReport(items) {
