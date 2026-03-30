@@ -133,6 +133,9 @@ const ALL_MENUS = {
     { id: 'adm-audit', label: 'Audit Trail', icon: 'History', path: '/audit', module: null, permission: null },
     { id: 'adm-rework', label: 'Reprelucrare', icon: 'RefreshCw', path: '/rework', module: 'production', permission: null },
     { id: 'adm-barcodes', label: 'Coduri QR', icon: 'QrCode', path: '/barcodes', module: null, permission: null },
+    { id: 'adm-traceability', label: 'Trasabilitate', icon: 'GitBranch', path: '/traceability', module: null, permission: null },
+    { id: 'adm-machine-kpi', label: 'KPI Masini', icon: 'Activity', path: '/machine-kpi', module: 'machines', permission: null },
+    { id: 'adm-work-instructions', label: 'Instructiuni Lucru', icon: 'BookOpen', path: '/work-instructions', module: 'production', permission: null },
   ],
 };
 

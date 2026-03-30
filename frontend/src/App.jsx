@@ -37,6 +37,9 @@ import SetupPage from './pages/SetupPage'
 import AuditPage from './pages/AuditPage'
 import ReworkPage from './pages/ReworkPage'
 import BarcodesPage from './pages/BarcodesPage'
+import TraceabilityPage from './pages/TraceabilityPage'
+import MachineKPIPage from './pages/MachineKPIPage'
+import WorkInstructionsPage from './pages/WorkInstructionsPage'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } })
 
@@ -86,6 +89,9 @@ function AppRoutes() {
               <Route path="/audit" element={<AuditPage />} />
               <Route path="/rework" element={<ReworkPage />} />
               <Route path="/barcodes" element={<BarcodesPage />} />
+              <Route path="/traceability" element={<TraceabilityPage />} />
+              <Route path="/machine-kpi" element={<MachineKPIPage />} />
+              <Route path="/work-instructions" element={<WorkInstructionsPage />} />
             </Routes>
           </LayoutComponent>
         </PrivateRoute>

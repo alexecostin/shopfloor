@@ -38,6 +38,8 @@ import shiftsRoutes from './modules/shifts/shifts.routes.js';
 import auditRoutes from './modules/audit/audit.routes.js';
 import reworkRoutes from './modules/production/rework.routes.js';
 import barcodesRoutes from './modules/barcodes/barcodes.routes.js';
+import traceabilityRoutes from './modules/traceability/traceability.routes.js';
+import workInstructionsRoutes from './modules/production/work-instructions.routes.js';
 import { checkAllRules } from './services/alert-engine.service.js';
 import { processHeartbeat, checkAllLicenses } from './services/license.service.js';
 
@@ -111,6 +113,8 @@ app.use('/api/v1/shifts', shiftsRoutes);
 app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/production/rework', reworkRoutes);
 app.use('/api/v1/barcodes', barcodesRoutes);
+app.use('/api/v1/traceability', traceabilityRoutes);
+app.use('/api/v1/work-instructions', workInstructionsRoutes);
 
 // 404 handler
 app.use((req, res) => {

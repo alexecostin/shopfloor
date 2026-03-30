@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as controller from './machines.controller.js';
+import * as kpiController from './machine-kpi.controller.js';
 import * as pc from '../maintenance/planned.controller.js';
 import { authenticate, authorize } from '../../middleware/auth.js';
 import moduleGuard from '../../middleware/moduleGuard.js';
@@ -10,6 +11,11 @@ const router = Router();
 
 router.use(authenticate);
 router.use(moduleGuard('machines'));
+
+// KPI routes (before /:id to avoid param conflicts)
+router.get('/kpi/comparison', kpiController.comparison);
+router.get('/:id/kpi', kpiController.getDashboard);
+router.get('/:id/kpi/trend', kpiController.getTrend);
 
 router.get('/', controller.list);
 router.get('/:id', controller.get);
