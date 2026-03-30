@@ -35,3 +35,12 @@ export const addMaintenance = wrap(async (req, res) => {
   res.status(201).json(r);
 });
 export const consumablesStatus = wrap(async (req, res) => res.json(await svc.getConsumablesStatus()));
+
+export const recordCalibration = wrap(async (req, res) => {
+  const { calibratedAt, calibratedBy, certificateUrl, intervalMonths } = req.body;
+  const r = await svc.recordCalibration(req.params.id, { calibratedAt, calibratedBy, certificateUrl, intervalMonths });
+  if (!r) return res.status(404).json({ message: 'Scula negasita.' });
+  res.json(r);
+});
+
+export const calibrationDashboard = wrap(async (req, res) => res.json(await svc.getCalibrationDashboard()));

@@ -29,13 +29,47 @@ export async function getTool(id) {
   return { ...tool, maintenance_log, assignments_log };
 }
 
+function computeNextCalibrationDate(lastCalibratedAt, intervalMonths) {
+  if (!lastCalibratedAt || !intervalMonths) return null;
+  const d = new Date(lastCalibratedAt);
+  d.setMonth(d.getMonth() + intervalMonths);
+  return d.toISOString().slice(0, 10);
+}
+
+function computeCalibrationStatus(nextCalibrationDate) {
+  if (!nextCalibrationDate) return 'not_applicable';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const next = new Date(nextCalibrationDate);
+  next.setHours(0, 0, 0, 0);
+  const in30 = new Date(today);
+  in30.setDate(in30.getDate() + 30);
+  if (next.getTime() <= today.getTime()) return 'expired';
+  if (next.getTime() <= in30.getTime()) return 'expiring_soon';
+  return 'valid';
+}
+
+function applyCalibrationFields(data) {
+  const out = { ...data };
+  if (data.tracking_mode === 'measurement_instrument') {
+    const nextDate = computeNextCalibrationDate(data.last_calibrated_at, data.calibration_interval_months);
+    if (nextDate) {
+      out.next_calibration_date = nextDate;
+      out.calibration_status = computeCalibrationStatus(nextDate);
+    }
+  }
+  return out;
+}
+
 export async function createTool(data) {
-  const [r] = await db('machines.tools').insert(data).returning('*');
+  const prepared = applyCalibrationFields(data);
+  const [r] = await db('machines.tools').insert(prepared).returning('*');
   return r;
 }
 
 export async function updateTool(id, data) {
-  const [r] = await db('machines.tools').where('id', id).update({ ...data, updated_at: new Date() }).returning('*');
+  const prepared = applyCalibrationFields(data);
+  const [r] = await db('machines.tools').where('id', id).update({ ...prepared, updated_at: new Date() }).returning('*');
   return r;
 }
 
@@ -118,6 +152,73 @@ export async function incrementToolCycles(machineId, pieces) {
     }
     await db('machines.tools').where('id', tool.id).update(updates);
   }
+}
+
+export async function recalculateCalibrationStatus(toolId) {
+  const tool = await db('machines.tools').where('id', toolId).first();
+  if (!tool) return null;
+  const status = computeCalibrationStatus(tool.next_calibration_date);
+  if (status !== tool.calibration_status) {
+    await db('machines.tools').where('id', toolId).update({ calibration_status: status, updated_at: new Date() });
+  }
+  return status;
+}
+
+export async function recordCalibration(toolId, { calibratedAt, calibratedBy, certificateUrl, intervalMonths }) {
+  const tool = await db('machines.tools').where('id', toolId).first();
+  if (!tool) return null;
+
+  const interval = intervalMonths || tool.calibration_interval_months;
+  const nextDate = computeNextCalibrationDate(calibratedAt, interval);
+  const status = computeCalibrationStatus(nextDate);
+
+  const [r] = await db('machines.tools').where('id', toolId).update({
+    last_calibrated_at: calibratedAt,
+    calibrated_by: calibratedBy,
+    calibration_certificate_url: certificateUrl || tool.calibration_certificate_url,
+    calibration_interval_months: interval,
+    next_calibration_date: nextDate,
+    calibration_status: status,
+    updated_at: new Date(),
+  }).returning('*');
+  return r;
+}
+
+export async function getCalibrationDashboard() {
+  // Recalculate statuses for all instruments first
+  const instruments = await db('machines.tools')
+    .whereNotNull('next_calibration_date')
+    .where('status', '!=', 'retired');
+
+  for (const t of instruments) {
+    const status = computeCalibrationStatus(t.next_calibration_date);
+    if (status !== t.calibration_status) {
+      await db('machines.tools').where('id', t.id).update({ calibration_status: status, updated_at: new Date() });
+    }
+  }
+
+  const counts = await db('machines.tools')
+    .where('status', '!=', 'retired')
+    .select('calibration_status')
+    .count('* as count')
+    .groupBy('calibration_status');
+
+  const countsMap = {};
+  for (const row of counts) countsMap[row.calibration_status] = Number(row.count);
+
+  const tools = await db('machines.tools as t')
+    .leftJoin('machines.machines as m', 't.current_machine_id', 'm.id')
+    .select('t.*', 'm.code as machine_code', 'm.name as machine_name')
+    .where('t.status', '!=', 'retired')
+    .whereIn('t.calibration_status', ['expiring_soon', 'expired'])
+    .orderBy('t.next_calibration_date', 'asc');
+
+  return {
+    valid: countsMap.valid || 0,
+    expiringSoon: countsMap.expiring_soon || 0,
+    expired: countsMap.expired || 0,
+    tools,
+  };
 }
 
 export async function getConsumablesStatus() {

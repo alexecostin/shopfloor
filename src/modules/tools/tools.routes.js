@@ -9,6 +9,7 @@ const mgrOrMaint = authorize('admin', 'production_manager', 'maintenance');
 const mgrOrShift = authorize('admin', 'production_manager', 'shift_leader');
 
 router.get('/consumables/status', c.consumablesStatus);
+router.get('/calibration/dashboard', c.calibrationDashboard);
 router.get('/', c.list);
 router.get('/:id', c.get);
 router.post('/', mgr, c.create);
@@ -17,5 +18,6 @@ router.delete('/:id', mgr, c.retire);
 router.post('/:id/assign', mgrOrShift, c.assign);
 router.put('/:id/cycles', mgrOrShift, c.updateCycles);
 router.post('/:id/maintenance', mgrOrMaint, c.addMaintenance);
+router.post('/:id/calibrate', mgrOrMaint, c.recordCalibration);
 
 export default router;

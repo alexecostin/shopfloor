@@ -136,6 +136,9 @@ const ALL_MENUS = {
     { id: 'adm-traceability', label: 'Trasabilitate', icon: 'GitBranch', path: '/traceability', module: null, permission: null },
     { id: 'adm-machine-kpi', label: 'KPI Masini', icon: 'Activity', path: '/machine-kpi', module: 'machines', permission: null },
     { id: 'adm-work-instructions', label: 'Instructiuni Lucru', icon: 'BookOpen', path: '/work-instructions', module: 'production', permission: null },
+    { id: 'adm-purchasing', label: 'Achizitii', icon: 'ShoppingCart', path: '/purchasing', module: 'inventory', permission: null },
+    { id: 'adm-shipments', label: 'Expeditii', icon: 'Truck', path: '/shipments', module: null, permission: null },
+    { id: 'adm-quality', label: 'Calitate', icon: 'ShieldCheck', path: '/quality', module: null, permission: null },
   ],
 };
 
