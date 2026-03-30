@@ -74,7 +74,8 @@ export async function listReports({ machineId, operatorId, shift, dateFrom, date
   return { data: reports, pagination: { page, limit, total: Number(count), pages: Math.ceil(count / limit) } };
 }
 
-export async function createReport({ orderId, machineId, shift, goodPieces, scrapPieces, scrapReason, notes }, operatorId, req = null) {
+export async function createReport({ orderId, machineId, shift, goodPieces, scrapPieces, scrapReason, scrapReasonCode, reworkPieces, reworkReasonCode, notes }, operatorId, req = null) {
+  const tenant = extractTenant(req);
   const [report] = await db('production.reports').insert({
     order_id: orderId || null,
     machine_id: machineId,
@@ -83,9 +84,19 @@ export async function createReport({ orderId, machineId, shift, goodPieces, scra
     good_pieces: goodPieces,
     scrap_pieces: scrapPieces || 0,
     scrap_reason: scrapReason || null,
+    scrap_reason_code: scrapReasonCode || null,
+    rework_pieces: reworkPieces || 0,
+    rework_reason_code: reworkReasonCode || null,
     notes: notes || null,
-    ...extractTenant(req),
+    ...tenant,
   }).returning('*');
+
+  // Auto-create rework_queue entry when reworkPieces > 0
+  if (reworkPieces && reworkPieces > 0) {
+    const { createFromReport } = await import('../../services/rework.service.js');
+    await createFromReport(report.id, reworkPieces, reworkReasonCode || null, tenant.tenant_id, tenant.org_unit_id).catch(() => {});
+  }
+
   return report;
 }
 

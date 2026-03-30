@@ -24,6 +24,9 @@ export const createReportSchema = Joi.object({
   goodPieces: Joi.number().integer().min(0).required().messages({ 'any.required': 'Numarul de piese bune este obligatoriu.' }),
   scrapPieces: Joi.number().integer().min(0).optional().default(0),
   scrapReason: Joi.string().max(255).optional().allow('', null),
+  scrapReasonCode: Joi.string().max(100).optional().allow('', null),
+  reworkPieces: Joi.number().integer().min(0).optional().default(0),
+  reworkReasonCode: Joi.string().max(100).optional().allow('', null),
   notes: Joi.string().optional().allow('', null),
 });
 

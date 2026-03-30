@@ -130,6 +130,9 @@ const ALL_MENUS = {
     { id: 'adm-currency', label: 'Monede & Cursuri', icon: 'DollarSign', path: '/currency', module: null, permission: null },
     { id: 'adm-scheduling', label: 'Planificare Auto', icon: 'Zap', path: '/scheduling', module: 'planning', permission: null },
     { id: 'adm-setup', label: 'Timpi Setup', icon: 'Timer', path: '/setup', module: 'setup_times', permission: null },
+    { id: 'adm-audit', label: 'Audit Trail', icon: 'History', path: '/audit', module: null, permission: null },
+    { id: 'adm-rework', label: 'Reprelucrare', icon: 'RefreshCw', path: '/rework', module: 'production', permission: null },
+    { id: 'adm-barcodes', label: 'Coduri QR', icon: 'QrCode', path: '/barcodes', module: null, permission: null },
   ],
 };
 

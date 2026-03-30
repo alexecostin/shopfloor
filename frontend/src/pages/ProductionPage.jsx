@@ -21,7 +21,7 @@ const SHIFTS = ['Tura I', 'Tura II', 'Tura III']
 
 function ReportModal({ machines, orders, onClose }) {
   const qc = useQueryClient()
-  const [form, setForm] = useState({ machineId: '', orderId: '', shift: 'Tura I', goodPieces: 0, scrapPieces: 0, scrapReason: '', notes: '' })
+  const [form, setForm] = useState({ machineId: '', orderId: '', shift: 'Tura I', goodPieces: 0, scrapPieces: 0, scrapReason: '', scrapReasonCode: '', reworkPieces: 0, reworkReasonCode: '', notes: '' })
 
   const mutation = useMutation({
     mutationFn: (data) => api.post('/production/reports', data),
@@ -56,7 +56,14 @@ function ReportModal({ machines, orders, onClose }) {
             </div>
           </div>
           {form.scrapPieces > 0 && (
-            <LookupSelect lookupType="scrap_reasons" value={form.scrapReason} onChange={v => setForm({ ...form, scrapReason: v })} placeholder="Motiv rebuturi" />
+            <LookupSelect lookupType="scrap_reasons" value={form.scrapReasonCode || form.scrapReason} onChange={v => setForm({ ...form, scrapReasonCode: v, scrapReason: v })} placeholder="Motiv rebuturi" />
+          )}
+          <div>
+            <label className="text-xs text-slate-500">Piese reprelucrare</label>
+            <input type="number" min={0} className="input" value={form.reworkPieces} onChange={e => setForm({ ...form, reworkPieces: +e.target.value })} />
+          </div>
+          {form.reworkPieces > 0 && (
+            <LookupSelect lookupType="rework_reasons" value={form.reworkReasonCode} onChange={v => setForm({ ...form, reworkReasonCode: v })} placeholder="Motiv reprelucrare" />
           )}
           <textarea className="input resize-none" rows={2} placeholder="Observatii (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
         </div>

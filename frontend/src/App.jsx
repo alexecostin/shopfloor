@@ -34,6 +34,9 @@ import CurrencyPage from './pages/CurrencyPage'
 import ProfilePage from './pages/ProfilePage'
 import SchedulingPage from './pages/SchedulingPage'
 import SetupPage from './pages/SetupPage'
+import AuditPage from './pages/AuditPage'
+import ReworkPage from './pages/ReworkPage'
+import BarcodesPage from './pages/BarcodesPage'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } })
 
@@ -80,6 +83,9 @@ function AppRoutes() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/scheduling" element={<SchedulingPage />} />
               <Route path="/setup" element={<SetupPage />} />
+              <Route path="/audit" element={<AuditPage />} />
+              <Route path="/rework" element={<ReworkPage />} />
+              <Route path="/barcodes" element={<BarcodesPage />} />
             </Routes>
           </LayoutComponent>
         </PrivateRoute>

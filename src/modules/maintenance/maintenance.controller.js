@@ -1,6 +1,7 @@
 import * as service from './maintenance.service.js';
 import { sendNotification } from '../../services/email.service.js';
 import db from '../../config/db.js';
+import { logBusinessAction } from '../../services/audit.service.js';
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (e) { next(e); } };
 
@@ -14,6 +15,7 @@ export const get = wrap(async (req, res) => res.json(await service.getRequest(re
 export const create = wrap(async (req, res) => {
   const request = await service.createRequest(req.body, req.user.userId, req);
   res.status(201).json(request);
+  logBusinessAction(req, 'maintenance.created', 'maintenance_request', request.id, request.request_number, 'Maintenance request created');
   const machine = await db('machines.machines').where({ id: request.machine_id }).first().catch(() => null);
   sendNotification({ type: 'maintenance_new', data: { priority: request.priority, machineCode: machine?.code || '?', problemType: request.problem_type, requestNumber: request.request_number, description: request.description } }).catch(() => {});
 });

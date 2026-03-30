@@ -1,9 +1,11 @@
 import * as authService from './auth.service.js';
+import { logBusinessAction } from '../../services/audit.service.js';
 
 export async function login(req, res, next) {
   try {
     const result = await authService.login(req.body.email, req.body.password);
     res.json(result);
+    logBusinessAction(req, 'user.login', 'user', result.user?.id || null, result.user?.full_name || req.body.email, 'User logged in');
   } catch (err) {
     next(err);
   }

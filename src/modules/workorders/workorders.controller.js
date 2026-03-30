@@ -1,4 +1,5 @@
 import * as svc from './workorders.service.js';
+import { logBusinessAction } from '../../services/audit.service.js';
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (e) { next(e); } };
 const tid = req => req.user?.tenantId || req.tenantFilter?.tenantId;
@@ -16,6 +17,7 @@ export const getWorkOrder = wrap(async (req, res) => {
 export const createWorkOrder = wrap(async (req, res) => {
   const wo = await svc.createWorkOrder(req.body, req.user.userId);
   res.status(201).json(wo);
+  logBusinessAction(req, 'workorder.created', 'work_order', wo.id, wo.wo_number || wo.id, 'Work order created');
 });
 
 export const updateWorkOrder = wrap(async (req, res) => {

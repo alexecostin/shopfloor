@@ -35,6 +35,9 @@ import approvalsRoutes from './modules/approvals/approvals.routes.js';
 import lookupsRoutes from './modules/lookups/lookups.routes.js';
 import currenciesRoutes from './modules/currencies/currencies.routes.js';
 import shiftsRoutes from './modules/shifts/shifts.routes.js';
+import auditRoutes from './modules/audit/audit.routes.js';
+import reworkRoutes from './modules/production/rework.routes.js';
+import barcodesRoutes from './modules/barcodes/barcodes.routes.js';
 import { checkAllRules } from './services/alert-engine.service.js';
 import { processHeartbeat, checkAllLicenses } from './services/license.service.js';
 
@@ -105,6 +108,9 @@ app.use('/api/v1/approvals', approvalsRoutes);
 app.use('/api/v1/lookups', lookupsRoutes);
 app.use('/api/v1/currencies', currenciesRoutes);
 app.use('/api/v1/shifts', shiftsRoutes);
+app.use('/api/v1/audit', auditRoutes);
+app.use('/api/v1/production/rework', reworkRoutes);
+app.use('/api/v1/barcodes', barcodesRoutes);
 
 // 404 handler
 app.use((req, res) => {
