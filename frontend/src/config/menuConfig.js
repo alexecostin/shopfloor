@@ -139,6 +139,9 @@ const ALL_MENUS = {
     { id: 'adm-purchasing', label: 'Achizitii', icon: 'ShoppingCart', path: '/purchasing', module: 'inventory', permission: null },
     { id: 'adm-shipments', label: 'Expeditii', icon: 'Truck', path: '/shipments', module: null, permission: null },
     { id: 'adm-quality', label: 'Calitate', icon: 'ShieldCheck', path: '/quality', module: null, permission: null },
+    { id: 'adm-documents', label: 'Documente', icon: 'FileArchive', path: '/documents', module: null, permission: null },
+    { id: 'adm-supplier-score', label: 'Evaluare Furnizori', icon: 'Star', path: '/supplier-scorecard', module: 'companies', permission: null },
+    { id: 'adm-integrations', label: 'Integrari ERP', icon: 'Plug', path: '/integrations', module: null, permission: null },
   ],
 };
 
