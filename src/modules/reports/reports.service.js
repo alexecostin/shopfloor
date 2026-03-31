@@ -37,9 +37,9 @@ export async function getByProduct({ dateFrom, dateTo, productId }) {
       'bp.id as product_id',
       'bp.reference as product_code',
       'bp.name as product_name',
-      db.raw('SUM(da.planned_quantity) as planned')
+      db.raw('SUM(da.planned_qty) as planned')
     )
-    .whereBetween('da.date', [dateFrom, dateTo])
+    .whereBetween('da.plan_date', [dateFrom, dateTo])
     .groupBy('bp.id', 'bp.reference', 'bp.name');
 
   if (productId) {
@@ -93,7 +93,7 @@ export async function getByMachine({ date, dateFrom, dateTo }) {
     .leftJoin('production.orders as o', 'r.order_id', 'o.id')
     .leftJoin('planning.daily_allocations as da', function() {
       this.on('da.machine_id', '=', 'r.machine_id')
-        .andOn(db.raw('da.date = date(r.reported_at)'))
+        .andOn(db.raw('da.plan_date = date(r.reported_at)'))
         .andOn('da.shift', '=', 'r.shift');
     })
     .select(
@@ -102,7 +102,7 @@ export async function getByMachine({ date, dateFrom, dateTo }) {
       db.raw('COALESCE(o.product_name, \'\') as product_name'),
       'r.shift',
       db.raw('date(r.reported_at) as date'),
-      db.raw('SUM(da.planned_quantity) as planned'),
+      db.raw('SUM(da.planned_qty) as planned'),
       db.raw('SUM(r.good_pieces) as realized'),
       db.raw('SUM(r.scrap_pieces) as scrap')
     )
@@ -226,9 +226,9 @@ export async function getWeeklySummary(weekStart) {
     .select(
       'm.id as machine_id',
       db.raw('COALESCE(bp.reference, \'\') as product_code'),
-      db.raw('SUM(da.planned_quantity) as planned')
+      db.raw('SUM(da.planned_qty) as planned')
     )
-    .whereBetween('da.date', [from, to])
+    .whereBetween('da.plan_date', [from, to])
     .groupBy('m.id', db.raw('bp.reference'));
 
   const plannedMap = {};
@@ -298,11 +298,11 @@ export async function getTrend({ productId, machineId, weeks = 8 }) {
   // Planned per week
   let planQ = db('planning.daily_allocations as da')
     .select(
-      db.raw('date_trunc(\'week\', da.date::timestamp)::date as week_start'),
-      db.raw('SUM(da.planned_quantity) as planned')
+      db.raw('date_trunc(\'week\', da.plan_date::timestamp)::date as week_start'),
+      db.raw('SUM(da.planned_qty) as planned')
     )
-    .where(db.raw('da.date >= ?', [dateFrom]))
-    .groupBy(db.raw('date_trunc(\'week\', da.date::timestamp)::date'))
+    .where(db.raw('da.plan_date >= ?', [dateFrom]))
+    .groupBy(db.raw('date_trunc(\'week\', da.plan_date::timestamp)::date'))
     .orderBy('week_start');
 
   if (productId) planQ = planQ.where('da.product_id', productId);

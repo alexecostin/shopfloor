@@ -3,7 +3,7 @@ import db from '../config/db.js';
 export async function calculateQualityScore(supplierId, dateFrom, dateTo) {
   // Total deliveries from this supplier
   const [{ total }] = await db('inventory.purchase_history')
-    .where('supplier_id', supplierId)
+    .where('supplier_company_id', supplierId)
     .where('created_at', '>=', dateFrom).where('created_at', '<=', dateTo)
     .count('* as total');
 
@@ -21,7 +21,7 @@ export async function calculateQualityScore(supplierId, dateFrom, dateTo) {
 export async function calculateDeliveryScore(supplierId, dateFrom, dateTo) {
   // POs received for this supplier
   const pos = await db('purchasing.purchase_orders')
-    .where('supplier_id', supplierId)
+    .where('supplier_company_id', supplierId)
     .whereIn('status', ['received', 'partially_received'])
     .where('created_at', '>=', dateFrom).where('created_at', '<=', dateTo)
     .select('id', 'confirmed_delivery_date').catch(() => []);
@@ -42,7 +42,7 @@ export async function calculateDeliveryScore(supplierId, dateFrom, dateTo) {
 export async function calculatePriceScore(supplierId, dateFrom, dateTo) {
   // Get supplier's items with prices
   const items = await db('inventory.item_suppliers')
-    .where('supplier_id', supplierId)
+    .where('supplier_company_id', supplierId)
     .select('item_id', 'unit_price').catch(() => []);
 
   if (items.length === 0) return { score: 100, items: 0 };
