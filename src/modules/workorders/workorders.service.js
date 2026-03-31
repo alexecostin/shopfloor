@@ -10,12 +10,12 @@ async function nextWONumber() {
 
 export async function listWorkOrders({ orderId, status, priority, page = 1, limit = 50 } = {}) {
   const offset = (page - 1) * limit;
-  let q = db('production.work_orders').orderBy('created_at', 'desc');
+  let q = db('production.work_orders');
   if (orderId) q = q.where('order_id', orderId);
   if (status) q = q.where('status', status);
   if (priority) q = q.where('priority', priority);
   const [{ count }] = await q.clone().count('* as count');
-  const data = await q.limit(limit).offset(offset);
+  const data = await q.clone().orderBy('created_at', 'desc').limit(limit).offset(offset);
   return { data, total: Number(count), page, limit };
 }
 

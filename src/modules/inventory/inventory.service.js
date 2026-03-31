@@ -33,13 +33,13 @@ export async function listItems({ page = 1, limit = 50, category, search, belowM
   let q = db('inventory.items as i')
     .leftJoin('inventory.stock_levels as sl', 'i.id', 'sl.item_id')
     .select('i.*', 'sl.current_qty', 'sl.reserved_qty',
-      db.raw('COALESCE(sl.current_qty, 0) - COALESCE(sl.reserved_qty, 0) AS available_qty'))
-    .orderBy('i.name');
+      db.raw('COALESCE(sl.current_qty, 0) - COALESCE(sl.reserved_qty, 0) AS available_qty'));
   if (category) q = q.where('i.category', category);
   if (search) q = q.where((b) => b.where('i.code', 'ilike', `%${escapeLike(search)}%`).orWhere('i.name', 'ilike', `%${escapeLike(search)}%`));
   if (belowMin === 'true' || belowMin === true) q = q.whereRaw('COALESCE(sl.current_qty, 0) <= i.min_stock');
-  const [{ count }] = await q.clone().count('i.id as count');
-  const data = await q.limit(limit).offset(offset);
+  const countQ = q.clone().clearSelect().clearOrder().count('i.id as count');
+  const [{ count }] = await countQ;
+  const data = await q.clone().orderBy('i.name').limit(limit).offset(offset);
   return { data, total: Number(count), page, limit };
 }
 
