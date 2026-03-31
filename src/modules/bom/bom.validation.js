@@ -32,6 +32,15 @@ export const createOperation = Joi.object({
   setupTimeMinutes: Joi.number().integer().min(0).default(0),
   description: Joi.string().allow('', null),
   isActive: Joi.boolean().default(true),
+  cncProgram: Joi.string().max(255).allow('', null),
+  rawMaterialSpec: Joi.string().allow('', null),
+  toolsConfig: Joi.array().items(Joi.object()).default([]),
+  machineParameters: Joi.array().items(Joi.object()).default([]),
+  consumables: Joi.array().items(Joi.object()).default([]),
+  attentionPoints: Joi.array().items(Joi.object()).default([]),
+  minBatchBeforeNext: Joi.number().integer().min(1).allow(null),
+  transferType: Joi.string().max(50).allow('', null),
+  piecesPerHour: Joi.number().precision(2).allow(null),
 });
 
 export const createMaterial = Joi.object({

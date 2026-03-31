@@ -4,6 +4,7 @@ import { useState } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { TrendingUp, DollarSign, Activity, AlertTriangle, BarChart2 } from 'lucide-react'
+import DailyAssistant from '../../components/DailyAssistant'
 
 function KPICard({ label, value, sub, color = 'blue', trend }) {
   const colors = { blue: 'border-blue-200 bg-blue-50', green: 'border-green-200 bg-green-50', yellow: 'border-yellow-200 bg-yellow-50', red: 'border-red-200 bg-red-50' }
@@ -71,6 +72,8 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
       )}
+
+      <DailyAssistant />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KPICard label="OEE Mediu Azi" value={oee?.avgOEE ? `${oee.avgOEE.toFixed(1)}%` : '—'} color={oee?.avgOEE >= 85 ? 'green' : oee?.avgOEE >= 65 ? 'yellow' : 'red'} />

@@ -78,23 +78,33 @@ export async function listOperations(productId) {
 }
 
 export async function createOperation(productId, data) {
-  let piecesPerHour = data.piecesPerHour || null;
-  if (data.cycleTimeSeconds && data.cycleTimeSeconds > 0) {
-    piecesPerHour = (3600 / data.cycleTimeSeconds) * (data.nrCavities || 1);
+  const ct = data.cycleTimeSeconds || data.cycle_time_seconds || null;
+  const nc = data.nrCavities || data.nr_cavities || 1;
+  let piecesPerHour = data.piecesPerHour || data.pieces_per_hour || null;
+  if (ct && ct > 0) {
+    piecesPerHour = (3600 / ct) * nc;
   }
   const row = {
     product_id: productId,
     sequence: data.sequence,
-    operation_name: data.operationName,
-    operation_type: data.operationType,
-    machine_type: data.machineType,
-    machine_id: data.machineId,
-    cycle_time_seconds: data.cycleTimeSeconds,
-    nr_cavities: data.nrCavities || 1,
+    operation_name: data.operationName || data.operation_name,
+    operation_type: data.operationType || data.operation_type,
+    machine_type: data.machineType || data.machine_type,
+    machine_id: data.machineId || data.machine_id || null,
+    cycle_time_seconds: ct,
+    nr_cavities: nc,
     pieces_per_hour: piecesPerHour,
-    setup_time_minutes: data.setupTimeMinutes || 0,
+    setup_time_minutes: data.setupTimeMinutes || data.setup_time_minutes || 0,
     description: data.description,
-    is_active: data.isActive !== false,
+    is_active: data.isActive !== false && data.is_active !== false,
+    cnc_program: data.cncProgram || data.cnc_program || null,
+    raw_material_spec: data.rawMaterialSpec || data.raw_material_spec || null,
+    tools_config: JSON.stringify(data.toolsConfig || data.tools_config || []),
+    machine_parameters: JSON.stringify(data.machineParameters || data.machine_parameters || []),
+    consumables: JSON.stringify(data.consumables || []),
+    attention_points: JSON.stringify(data.attentionPoints || data.attention_points || []),
+    min_batch_before_next: data.minBatchBeforeNext || data.min_batch_before_next || null,
+    transfer_type: data.transferType || data.transfer_type || null,
   };
   const [op] = await db('bom.operations').insert(row).returning('*');
   return op;
@@ -102,21 +112,41 @@ export async function createOperation(productId, data) {
 
 export async function updateOperation(id, data) {
   const row = {};
-  const fields = ['operationName', 'operationType', 'machineType', 'machineId',
-    'cycleTimeSeconds', 'nrCavities', 'setupTimeMinutes', 'description', 'isActive', 'sequence'];
-  const dbMap = {
+  // Map of snake_case DB fields that can come directly from frontend
+  const snakeFields = ['operation_name','operation_type','machine_type','machine_id',
+    'cycle_time_seconds','setup_time_minutes','description','sequence',
+    'cnc_program','raw_material_spec','tools_config','machine_parameters',
+    'consumables','attention_points','min_batch_before_next','nr_cavities',
+    'pieces_per_hour','transfer_type','is_active'];
+  const jsonFields = ['tools_config','machine_parameters','consumables','attention_points'];
+
+  for (const f of snakeFields) {
+    if (data[f] !== undefined) {
+      row[f] = jsonFields.includes(f) ? JSON.stringify(data[f]) : data[f];
+    }
+  }
+
+  // Also handle camelCase from frontend
+  const camelMap = {
     operationName: 'operation_name', operationType: 'operation_type', machineType: 'machine_type',
     machineId: 'machine_id', cycleTimeSeconds: 'cycle_time_seconds', nrCavities: 'nr_cavities',
-    setupTimeMinutes: 'setup_time_minutes', isActive: 'is_active', sequence: 'sequence',
+    setupTimeMinutes: 'setup_time_minutes', isActive: 'is_active',
+    cncProgram: 'cnc_program', rawMaterialSpec: 'raw_material_spec',
+    toolsConfig: 'tools_config', machineParameters: 'machine_parameters',
+    attentionPoints: 'attention_points', minBatchBeforeNext: 'min_batch_before_next',
+    piecesPerHour: 'pieces_per_hour', transferType: 'transfer_type',
   };
-  for (const f of fields) {
-    if (data[f] !== undefined) row[dbMap[f] || f] = data[f];
+  for (const [camel, snake] of Object.entries(camelMap)) {
+    if (data[camel] !== undefined) {
+      row[snake] = jsonFields.includes(snake) ? JSON.stringify(data[camel]) : data[camel];
+    }
   }
-  if ((data.cycleTimeSeconds || row.cycle_time_seconds) && (data.nrCavities || row.nr_cavities)) {
-    const ct = data.cycleTimeSeconds || row.cycle_time_seconds;
-    const nc = data.nrCavities || row.nr_cavities || 1;
-    if (ct > 0) row.pieces_per_hour = (3600 / ct) * nc;
-  }
+
+  // Recalculate pieces_per_hour
+  const ct = row.cycle_time_seconds ?? data.cycleTimeSeconds ?? data.cycle_time_seconds;
+  const nc = row.nr_cavities ?? data.nrCavities ?? data.nr_cavities ?? 1;
+  if (ct && ct > 0) row.pieces_per_hour = (3600 / ct) * (nc || 1);
+
   const [op] = await db('bom.operations').where({ id }).update(row).returning('*');
   return op;
 }
@@ -219,6 +249,77 @@ export async function createCostRate(data) {
     notes: data.notes,
   }).returning('*');
   return rate;
+}
+
+// ─── MBOM for Work Order ─────────────────────────────────────────────────────
+
+export async function getMBOMForOrder(orderId) {
+  const order = await db('production.work_orders').where('id', orderId).first();
+  if (!order) return null;
+
+  // Find the product from BOM by matching product_reference or product_name
+  let product = null;
+  if (order.product_id) {
+    product = await db('bom.products').where('id', order.product_id).first();
+  }
+  if (!product && (order.product_reference || order.product_name)) {
+    product = await db('bom.products')
+      .where(q => {
+        if (order.product_reference) q.where('reference', order.product_reference);
+        else if (order.product_name) q.orWhere('name', 'ilike', `%${escapeLike(order.product_name)}%`);
+      })
+      .first();
+  }
+
+  if (!product) return { order, product: null, operations: [], components: [] };
+
+  // Get operations with machine names
+  const operations = await db('bom.operations as o')
+    .leftJoin('machines.machines as m', 'o.machine_id', 'm.id')
+    .where('o.product_id', product.id)
+    .orderBy('o.sequence')
+    .select('o.*', 'm.code as machine_code', 'm.name as machine_name');
+
+  // Get alternatives for each operation
+  for (const op of operations) {
+    op.alternatives = await db('bom.operation_alternatives as oa')
+      .leftJoin('machines.machines as am', 'oa.machine_id', 'am.id')
+      .where('oa.operation_id', op.id)
+      .select('oa.*', 'am.code as machine_code', 'am.name as machine_name');
+  }
+
+  // Get assembly components
+  const components = await db('bom.assembly_components')
+    .where('parent_product_id', product.id);
+
+  return { order, product, operations, components };
+}
+
+// ─── Operation Alternatives ──────────────────────────────────────────────────
+
+export async function addAlternative(operationId, data) {
+  const [alt] = await db('bom.operation_alternatives').insert({
+    operation_id: operationId,
+    machine_id: data.machineId || data.machine_id,
+    is_preferred: data.isPreferred || data.is_preferred || false,
+    cycle_time_seconds_override: data.cycleTimeSecondsOverride || data.cycle_time_seconds_override || null,
+    setup_time_minutes_override: data.setupTimeMinutesOverride || data.setup_time_minutes_override || null,
+    notes: data.notes || null,
+  }).returning('*');
+  return alt;
+}
+
+export async function removeAlternative(id) {
+  return db('bom.operation_alternatives').where({ id }).delete();
+}
+
+// ─── Validate MBOM ──────────────────────────────────────────────────────────
+
+export async function validateMBOM(productId) {
+  const [product] = await db('bom.products').where({ id: productId })
+    .update({ approval_status: 'active', approved_at: new Date() })
+    .returning('*');
+  return product;
 }
 
 // ─── Cost Calculator ──────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import toast from 'react-hot-toast'
 import { Activity, StopCircle, CheckCircle, ClipboardList, Plus, PlayCircle } from 'lucide-react'
+import DailyAssistant from '../../components/DailyAssistant'
 
 function StatCard({ icon: Icon, label, value, color = 'blue', sub }) {
   const colors = { blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600', yellow: 'bg-yellow-50 text-yellow-600', red: 'bg-red-50 text-red-600' }
@@ -85,6 +86,8 @@ export default function ShiftDashboard() {
         <h2 className="text-xl font-bold text-slate-800">Dashboard Tura</h2>
         <p className="text-sm text-slate-500">{new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
+
+      <DailyAssistant />
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard icon={Activity} label="OEE mediu azi" value={oee?.avgOEE ? `${oee.avgOEE.toFixed(1)}%` : '—'} color="blue" />

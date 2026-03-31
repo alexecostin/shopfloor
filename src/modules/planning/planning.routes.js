@@ -22,6 +22,10 @@ router.post('/allocations/bulk', mgr, validate(v.bulkAllocations), c.postBulkAll
 router.put('/allocations/:id', mgr, validate(v.updateAllocation), c.putAllocation);
 router.delete('/allocations/:id', mgr, c.deleteAllocation);
 
+// Smart Allocation
+router.get('/allocation-context/:machineId', c.getAllocationContext);
+router.get('/machine-load/:machineId', c.getMachineLoad);
+
 // Capacity
 router.get('/capacity', c.getCapacity);
 

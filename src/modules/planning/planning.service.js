@@ -192,6 +192,142 @@ export async function bulkCreateDemands(demands) {
   return db('planning.customer_demands').insert(rows).returning('*');
 }
 
+// ─── Allocation Context (Smart Allocation) ──────────────────────────────────
+
+/**
+ * Get allocation context for a machine — what can be allocated.
+ * Returns orders with MBOM operations compatible with this machine.
+ */
+export async function getAllocationContext(machineId) {
+  const machine = await db('machines.machines').where('id', machineId).first();
+  if (!machine) return { machine: null, availableOperations: [] };
+
+  // Find BOM operations that can run on this machine (primary or alternative)
+  const operations = await db('bom.operations as o')
+    .join('bom.products as p', 'o.product_id', 'p.id')
+    .leftJoin('machines.machines as m', 'o.machine_id', 'm.id')
+    .where(q => {
+      q.where('o.machine_id', machineId)
+       .orWhere('o.machine_type', machine.type);
+    })
+    .where('p.is_active', true)
+    .select('o.*', 'p.reference as product_reference', 'p.name as product_name',
+            'p.client_name as bom_client_name',
+            'm.code as machine_code', 'm.name as machine_name');
+
+  // Also check alternatives
+  const altOps = await db('bom.operation_alternatives as oa')
+    .join('bom.operations as o', 'oa.operation_id', 'o.id')
+    .join('bom.products as p', 'o.product_id', 'p.id')
+    .where('oa.machine_id', machineId)
+    .select('o.*', 'p.reference as product_reference', 'p.name as product_name',
+            'p.client_name as bom_client_name',
+            'oa.cycle_time_seconds_override', 'oa.setup_time_minutes_override');
+
+  // Merge and deduplicate
+  const allOps = [...operations];
+  for (const alt of altOps) {
+    if (!allOps.find(o => o.id === alt.id)) {
+      alt.cycle_time_seconds = alt.cycle_time_seconds_override || alt.cycle_time_seconds;
+      alt.setup_time_minutes = alt.setup_time_minutes_override || alt.setup_time_minutes;
+      allOps.push(alt);
+    }
+  }
+
+  // Find active work orders that need these products
+  const activeOrders = await db('production.work_orders')
+    .whereIn('status', ['planned', 'released', 'in_progress'])
+    .select('*');
+
+  // Match orders to operations
+  const results = [];
+  for (const op of allOps) {
+    const matchingOrders = activeOrders.filter(wo =>
+      wo.product_reference === op.product_reference ||
+      wo.product_name === op.product_name
+    );
+
+    for (const order of matchingOrders) {
+      // Calculate already allocated qty for this operation on any machine
+      const [{ allocated }] = await db('planning.daily_allocations')
+        .where('product_reference', op.product_reference)
+        .whereNot('status', 'cancelled')
+        .sum('planned_qty as allocated');
+
+      const totalQty = order.quantity || 0;
+      const alreadyAllocated = Number(allocated) || 0;
+      const remaining = Math.max(0, totalQty - alreadyAllocated);
+
+      if (remaining > 0) {
+        results.push({
+          operation: op,
+          order: {
+            id: order.id,
+            orderNumber: order.work_order_number,
+            orderRef: order.order_number,
+            clientName: op.bom_client_name || null,
+            deadline: order.scheduled_end || null,
+          },
+          productReference: op.product_reference,
+          productName: op.product_name,
+          operationName: op.operation_name,
+          operationType: op.operation_type,
+          sequence: op.sequence,
+          totalQty,
+          alreadyAllocated,
+          remaining,
+          cycleTimeSeconds: Number(op.cycle_time_seconds) || 0,
+          setupTimeMinutes: Number(op.setup_time_minutes) || 0,
+        });
+      }
+    }
+  }
+
+  return { machine, availableOperations: results };
+}
+
+/**
+ * Get machine load for a date range (for visualization).
+ */
+export async function getMachineLoad(machineId, dateFrom, dateTo) {
+  const allocations = await db('planning.daily_allocations')
+    .where('machine_id', machineId)
+    .where('plan_date', '>=', dateFrom)
+    .where('plan_date', '<=', dateTo)
+    .whereNot('status', 'cancelled')
+    .orderBy('plan_date');
+
+  // Get available hours per day
+  let availableHoursPerDay = 16;
+  try {
+    const { totalHours } = await shiftService.getAvailableHours(machineId, dateFrom);
+    if (totalHours > 0) availableHoursPerDay = totalHours;
+  } catch (_) { /* keep fallback */ }
+
+  // Group by date
+  const byDate = {};
+  for (const a of allocations) {
+    const d = (a.plan_date instanceof Date ? a.plan_date.toISOString() : a.plan_date).split('T')[0];
+    if (!byDate[d]) byDate[d] = { date: d, allocations: [], totalHours: 0, availableHours: availableHoursPerDay };
+    byDate[d].allocations.push(a);
+    byDate[d].totalHours += Number(a.planned_hours) || 0;
+  }
+
+  // Fill missing dates with empty entries
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const d = cursor.toISOString().split('T')[0];
+    if (!byDate[d]) {
+      byDate[d] = { date: d, allocations: [], totalHours: 0, availableHours: availableHoursPerDay };
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export async function getDashboard(weekStart) {

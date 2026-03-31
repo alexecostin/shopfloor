@@ -83,6 +83,18 @@ export const postBulkDemands = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+export const getAllocationContext = async (req, res, next) => {
+  try { res.json(await svc.getAllocationContext(req.params.machineId)); } catch (e) { next(e); }
+};
+
+export const getMachineLoad = async (req, res, next) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    if (!dateFrom || !dateTo) return res.status(400).json({ message: 'dateFrom and dateTo required.' });
+    res.json(await svc.getMachineLoad(req.params.machineId, dateFrom, dateTo));
+  } catch (e) { next(e); }
+};
+
 export const getDashboard = async (req, res, next) => {
   try {
     const weekStart = req.query.weekStart || new Date().toISOString().split('T')[0];

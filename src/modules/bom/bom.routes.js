@@ -39,6 +39,16 @@ router.post('/cost-rates', adm, validate(v.createCostRate), c.postCostRate);
 // Cost Calculator
 router.get('/products/:id/cost', c.getProductCost);
 
+// MBOM for Work Order
+router.get('/mbom/order/:orderId', c.getMBOMForOrder);
+
+// Operation Alternatives
+router.post('/operations/:operationId/alternatives', mgr, c.postAlternative);
+router.delete('/alternatives/:id', mgr, c.deleteAlternative);
+
+// Validate MBOM
+router.put('/products/:productId/validate', mgr, c.validateMBOM);
+
 // Dependencies & Backward Scheduling
 router.get('/products/:productId/dependencies', c.getProductDependencies);
 router.post('/operations/:operationId/dependencies', mgr, c.addDependency);

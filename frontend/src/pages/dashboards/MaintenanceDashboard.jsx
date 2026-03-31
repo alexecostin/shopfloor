@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { Wrench, AlertTriangle, Clock, CheckCircle } from 'lucide-react'
+import DailyAssistant from '../../components/DailyAssistant'
 
 const PRIORITY_COLORS = { low: 'text-slate-500 bg-slate-100', medium: 'text-yellow-700 bg-yellow-100', high: 'text-orange-700 bg-orange-100', critical: 'text-red-700 bg-red-100' }
 
@@ -40,6 +41,8 @@ export default function MaintenanceDashboard() {
         <h2 className="text-xl font-bold text-slate-800">Dashboard Mentenanta</h2>
         <p className="text-sm text-slate-500">{new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
+
+      <DailyAssistant />
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard icon={Wrench} label="Cereri deschise" value={open} color="yellow" />

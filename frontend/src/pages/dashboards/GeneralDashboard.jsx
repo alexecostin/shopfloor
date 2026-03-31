@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { Activity, TrendingUp, AlertTriangle } from 'lucide-react'
 import useDarkMode from '../../hooks/useDarkMode'
+import DailyAssistant from '../../components/DailyAssistant'
 
 function StatCard({ icon: Icon, label, value, color = 'blue' }) {
   const colors = {
@@ -43,6 +44,8 @@ export default function GeneralDashboard() {
         <h2 className="text-xl font-bold text-slate-800">Dashboard</h2>
         <p className="text-sm text-slate-500">{new Date().toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
+
+      <DailyAssistant />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <StatCard icon={Activity} label="OEE Mediu" value={oee ? `${oee.avgOEE?.toFixed(1)}%` : '—'} color="blue" />

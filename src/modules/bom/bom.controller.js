@@ -150,3 +150,39 @@ export const getBackwardSchedule = async (req, res, next) => {
     res.json(await svc.getBackwardSchedule(req.params.productId, deadline, quantity));
   } catch (e) { next(e); }
 };
+
+// ─── MBOM for Work Order ─────────────────────────────────────────────────────
+
+export const getMBOMForOrder = async (req, res, next) => {
+  try {
+    const result = await svc.getMBOMForOrder(req.params.orderId);
+    if (!result) return res.status(404).json({ message: 'Comanda de lucru negasita.' });
+    res.json(result);
+  } catch (e) { next(e); }
+};
+
+// ─── Operation Alternatives ──────────────────────────────────────────────────
+
+export const postAlternative = async (req, res, next) => {
+  try {
+    const alt = await svc.addAlternative(req.params.operationId, req.body);
+    res.status(201).json(alt);
+  } catch (e) { next(e); }
+};
+
+export const deleteAlternative = async (req, res, next) => {
+  try {
+    await svc.removeAlternative(req.params.id);
+    res.json({ message: 'Sters.' });
+  } catch (e) { next(e); }
+};
+
+// ─── Validate MBOM ──────────────────────────────────────────────────────────
+
+export const validateMBOM = async (req, res, next) => {
+  try {
+    const product = await svc.validateMBOM(req.params.productId);
+    if (!product) return res.status(404).json({ message: 'Produs negasit.' });
+    res.json(product);
+  } catch (e) { next(e); }
+};
