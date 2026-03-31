@@ -110,38 +110,86 @@ const ALL_MENUS = {
 
   admin: [
     { id: 'adm-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/', module: null, permission: null },
-    { id: 'adm-production', label: 'Productie', icon: 'Factory', path: '/production', module: 'production', permission: null },
-    { id: 'adm-machines', label: 'Utilaje', icon: 'Cpu', path: '/machines', module: 'machines', permission: null },
-    { id: 'adm-maintenance', label: 'Mentenanta', icon: 'Wrench', path: '/maintenance', module: 'maintenance', permission: null },
-    { id: 'adm-planning', label: 'Planificare', icon: 'Calendar', path: '/planning', module: 'planning', permission: null },
-    { id: 'adm-bom', label: 'BOM', icon: 'Package', path: '/bom', module: 'bom_mbom', permission: null },
-    { id: 'adm-workorders', label: 'Comenzi', icon: 'FileText', path: '/work-orders', module: 'work_orders', permission: null },
-    { id: 'adm-inventory', label: 'Stocuri', icon: 'Package', path: '/inventory', module: 'inventory', permission: null },
-    { id: 'adm-companies', label: 'Companii', icon: 'Building2', path: '/companies', module: 'companies', permission: null },
-    { id: 'adm-costs', label: 'Costuri', icon: 'DollarSign', path: '/costs', module: 'costs_realtime', permission: null },
-    { id: 'adm-reports', label: 'Rapoarte', icon: 'BarChart2', path: '/reports', module: 'reports_advanced', permission: null },
-    { id: 'adm-alerts', label: 'Alerte', icon: 'Bell', path: '/alerts', module: 'alerts', permission: null },
-    { id: 'adm-import', label: 'Import', icon: 'Upload', path: '/import', module: 'import_export', permission: null },
-    { id: 'adm-approvals', label: 'Aprobari', icon: 'CheckCircle', path: '/approvals', module: null, permission: null },
-    { id: 'adm-users', label: 'Utilizatori', icon: 'Users', path: '/users', module: null, permission: null },
-    { id: 'adm-admin', label: 'Administrare', icon: 'Settings', path: '/admin', module: null, permission: null },
-    { id: 'adm-shifts', label: 'Ture', icon: 'Clock', path: '/shifts', module: null, permission: null },
-    { id: 'adm-lookups', label: 'Configurare Liste', icon: 'List', path: '/lookups', module: null, permission: null },
-    { id: 'adm-currency', label: 'Monede & Cursuri', icon: 'DollarSign', path: '/currency', module: null, permission: null },
-    { id: 'adm-scheduling', label: 'Planificare Auto', icon: 'Zap', path: '/scheduling', module: 'planning', permission: null },
-    { id: 'adm-setup', label: 'Timpi Setup', icon: 'Timer', path: '/setup', module: 'setup_times', permission: null },
-    { id: 'adm-audit', label: 'Audit Trail', icon: 'History', path: '/audit', module: null, permission: null },
-    { id: 'adm-rework', label: 'Reprelucrare', icon: 'RefreshCw', path: '/rework', module: 'production', permission: null },
-    { id: 'adm-barcodes', label: 'Coduri QR', icon: 'QrCode', path: '/barcodes', module: null, permission: null },
-    { id: 'adm-traceability', label: 'Trasabilitate', icon: 'GitBranch', path: '/traceability', module: null, permission: null },
-    { id: 'adm-machine-kpi', label: 'KPI Masini', icon: 'Activity', path: '/machine-kpi', module: 'machines', permission: null },
-    { id: 'adm-work-instructions', label: 'Instructiuni Lucru', icon: 'BookOpen', path: '/work-instructions', module: 'production', permission: null },
-    { id: 'adm-purchasing', label: 'Achizitii', icon: 'ShoppingCart', path: '/purchasing', module: 'inventory', permission: null },
-    { id: 'adm-shipments', label: 'Expeditii', icon: 'Truck', path: '/shipments', module: null, permission: null },
-    { id: 'adm-quality', label: 'Calitate', icon: 'ShieldCheck', path: '/quality', module: null, permission: null },
-    { id: 'adm-documents', label: 'Documente', icon: 'FileArchive', path: '/documents', module: null, permission: null },
-    { id: 'adm-supplier-score', label: 'Evaluare Furnizori', icon: 'Star', path: '/supplier-scorecard', module: 'companies', permission: null },
-    { id: 'adm-integrations', label: 'Integrari ERP', icon: 'Plug', path: '/integrations', module: null, permission: null },
+    {
+      id: 'adm-production', label: 'Productie', icon: 'Factory', path: '/production', module: 'production', permission: null,
+      children: [
+        { id: 'adm-prod-reports', label: 'Raportare', path: '/production', permission: null },
+        { id: 'adm-prod-orders', label: 'Comenzi lucru', path: '/work-orders', permission: null },
+        { id: 'adm-prod-rework', label: 'Reprelucrare', path: '/rework', permission: null },
+        { id: 'adm-prod-instructions', label: 'Instructiuni', path: '/work-instructions', permission: null },
+        { id: 'adm-prod-checklists', label: 'Checklists', path: '/checklists', permission: null },
+      ]
+    },
+    {
+      id: 'adm-planning', label: 'Planificare', icon: 'Calendar', path: '/planning', module: 'planning', permission: null,
+      children: [
+        { id: 'adm-plan-manual', label: 'Planuri & Gantt', path: '/planning', permission: null },
+        { id: 'adm-plan-auto', label: 'Planificare Auto', path: '/scheduling', permission: null },
+        { id: 'adm-plan-setup', label: 'Timpi Setup', path: '/setup', permission: null },
+        { id: 'adm-plan-bom', label: 'BOM / MBOM', path: '/bom', permission: null },
+      ]
+    },
+    {
+      id: 'adm-logistics', label: 'Logistica', icon: 'Package', path: '/inventory', module: 'inventory', permission: null,
+      children: [
+        { id: 'adm-log-inventory', label: 'Stocuri', path: '/inventory', permission: null },
+        { id: 'adm-log-purchasing', label: 'Achizitii', path: '/purchasing', permission: null },
+        { id: 'adm-log-shipments', label: 'Expeditii', path: '/shipments', permission: null },
+        { id: 'adm-log-traceability', label: 'Trasabilitate', path: '/traceability', permission: null },
+        { id: 'adm-log-barcodes', label: 'Coduri QR', path: '/barcodes', permission: null },
+      ]
+    },
+    {
+      id: 'adm-maintenance', label: 'Mentenanta', icon: 'Wrench', path: '/maintenance', module: 'maintenance', permission: null,
+      children: [
+        { id: 'adm-mnt-requests', label: 'Interventii', path: '/maintenance', permission: null },
+        { id: 'adm-mnt-tools', label: 'Scule & Matrite', path: '/tools', permission: null },
+        { id: 'adm-mnt-machines', label: 'Utilaje', path: '/machines', permission: null },
+        { id: 'adm-mnt-kpi', label: 'KPI Masini', path: '/machine-kpi', permission: null },
+      ]
+    },
+    {
+      id: 'adm-quality', label: 'Calitate', icon: 'ShieldCheck', path: '/quality', module: null, permission: null,
+      children: [
+        { id: 'adm-qual-measurements', label: 'Masurari & SPC', path: '/quality', permission: null },
+        { id: 'adm-qual-approvals', label: 'Aprobari', path: '/approvals', permission: null },
+      ]
+    },
+    {
+      id: 'adm-partners', label: 'Parteneri', icon: 'Building2', path: '/companies', module: 'companies', permission: null,
+      children: [
+        { id: 'adm-part-companies', label: 'Companii', path: '/companies', permission: null },
+        { id: 'adm-part-scorecard', label: 'Evaluare Furnizori', path: '/supplier-scorecard', permission: null },
+      ]
+    },
+    {
+      id: 'adm-hr', label: 'Resurse Umane', icon: 'Users', path: '/users', module: null, permission: null,
+      children: [
+        { id: 'adm-hr-users', label: 'Utilizatori', path: '/users', permission: null },
+        { id: 'adm-hr-skills', label: 'Competente', path: '/skill-matrix', permission: null },
+        { id: 'adm-hr-shifts', label: 'Ture', path: '/shifts', permission: null },
+      ]
+    },
+    {
+      id: 'adm-analytics', label: 'Rapoarte', icon: 'BarChart2', path: '/reports', module: 'reports_advanced', permission: null,
+      children: [
+        { id: 'adm-rpt-prr', label: 'P/R/R', path: '/reports', permission: null },
+        { id: 'adm-rpt-costs', label: 'Costuri', path: '/costs', permission: null },
+        { id: 'adm-rpt-alerts', label: 'Alerte', path: '/alerts', permission: null },
+        { id: 'adm-rpt-audit', label: 'Audit Trail', path: '/audit', permission: null },
+      ]
+    },
+    {
+      id: 'adm-settings', label: 'Administrare', icon: 'Settings', path: '/admin', module: null, permission: null,
+      children: [
+        { id: 'adm-set-admin', label: 'Organizatie & Roluri', path: '/admin', permission: null },
+        { id: 'adm-set-lookups', label: 'Configurare Liste', path: '/lookups', permission: null },
+        { id: 'adm-set-currency', label: 'Monede', path: '/currency', permission: null },
+        { id: 'adm-set-import', label: 'Import Date', path: '/import', permission: null },
+        { id: 'adm-set-docs', label: 'Documente', path: '/documents', permission: null },
+        { id: 'adm-set-integrations', label: 'Integrari ERP', path: '/integrations', permission: null },
+      ]
+    },
   ],
 };
 

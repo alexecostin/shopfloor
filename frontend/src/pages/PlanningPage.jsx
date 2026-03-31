@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Calendar, ChevronRight, Trash2, Pencil, Search, BarChart3 } from 'lucide-react'
+import { Plus, Calendar, ChevronRight, Trash2, Pencil, Search, BarChart3, PlayCircle, XCircle } from 'lucide-react'
 
 const SHIFTS = ['Tura I', 'Tura II', 'Tura III']
 const STATUS_COLORS = {
@@ -674,6 +674,25 @@ export default function PlanningPage() {
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[p.status] || 'bg-slate-100 text-slate-600'}`}>
                   {STATUS_LABELS[p.status] || p.status}
                 </span>
+                {/* Draft -> Active */}
+                {p.status === 'draft' && isManager && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); api.put(`/planning/master-plans/${p.id}`, { status: 'active' }).then(() => { qc.invalidateQueries(['master-plans']); toast.success('Plan activat!') }).catch(err => toast.error(err.response?.data?.message || 'Eroare')) }}
+                    className="px-3 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1"
+                  >
+                    <PlayCircle size={12} /> Activeaza
+                  </button>
+                )}
+                {/* Active -> Closed */}
+                {p.status === 'active' && isManager && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); api.put(`/planning/master-plans/${p.id}`, { status: 'closed' }).then(() => { qc.invalidateQueries(['master-plans']); toast.success('Plan inchis.') }).catch(err => toast.error(err.response?.data?.message || 'Eroare')) }}
+                    className="px-3 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1"
+                  >
+                    <XCircle size={12} /> Inchide
+                  </button>
+                )}
+                {/* Pending approval -> Approve / Reject */}
                 {p.status === 'pending_approval' && isManager && (
                   <>
                     <button

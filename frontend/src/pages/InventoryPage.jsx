@@ -401,11 +401,13 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('')
   const isManager = ['admin', 'production_manager'].includes(user?.role)
 
-  const { data: items, isLoading } = useQuery({
+  const { data: itemsRaw, isLoading } = useQuery({
     queryKey: ['inventory-items', search],
-    queryFn: () => api.get('/inventory/items', { params: { search, limit: 100 } }).then(r => r.data),
+    queryFn: () => api.get('/inventory/items', { params: { search: search || undefined, limit: 100 } }).then(r => r.data),
     enabled: tab === 'items',
   })
+  // API returns { data: [...], total, page, limit } — normalize so itemList is always the array
+  const itemList = itemsRaw?.data ?? itemsRaw ?? []
 
   const { data: alerts } = useQuery({
     queryKey: ['inventory-alerts'],
@@ -468,7 +470,7 @@ export default function InventoryPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading && <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">Se incarca...</td></tr>}
-                {items?.data?.map(item => {
+                {itemList.map(item => {
                   const belowMin = Number(item.current_qty || 0) <= Number(item.min_stock)
                   return (
                     <tr key={item.id} className={`hover:bg-slate-50 cursor-pointer ${belowMin ? 'bg-red-50' : ''}`} onClick={() => setSelectedItem(item)}>
@@ -497,7 +499,7 @@ export default function InventoryPage() {
                     </tr>
                   )
                 })}
-                {items?.data?.length === 0 && (
+                {!isLoading && itemList.length === 0 && (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                     <Package size={32} className="mx-auto mb-2 text-slate-300" />
                     Niciun articol.

@@ -24,7 +24,7 @@ export async function getCompany(id) {
 export async function createCompany(data) {
   const [company] = await db('companies.companies').insert({
     name: data.name,
-    company_types: data.companyTypes ? JSON.stringify(data.companyTypes) : JSON.stringify(['client']),
+    company_types: data.companyTypes ? JSON.stringify(data.companyTypes) : (data.companyType ? JSON.stringify([data.companyType]) : JSON.stringify(['client'])),
     fiscal_code: data.fiscalCode,
     trade_register: data.tradeRegister,
     address: data.address,
@@ -51,7 +51,11 @@ export async function updateCompany(id, data) {
   for (const [k, v] of Object.entries(map)) {
     if (data[k] !== undefined) row[v] = data[k];
   }
-  if (data.companyTypes !== undefined) row.company_types = JSON.stringify(data.companyTypes);
+  if (data.companyTypes !== undefined) {
+    row.company_types = JSON.stringify(data.companyTypes);
+  } else if (data.companyType !== undefined) {
+    row.company_types = JSON.stringify([data.companyType]);
+  }
   row.updated_at = new Date();
   const [company] = await db('companies.companies').where({ id }).update(row).returning('*');
   return company;

@@ -13,14 +13,30 @@ const TYPE_COLORS = {
   both: 'bg-purple-100 text-purple-700',
 }
 
+// company_types is stored as JSONB array in DB; extract display-friendly list
+function getCompanyTypes(company) {
+  if (Array.isArray(company.company_types)) return company.company_types
+  if (typeof company.company_types === 'string') {
+    try { return JSON.parse(company.company_types) } catch { /* fall through */ }
+  }
+  if (company.company_type) return [company.company_type]
+  return ['client']
+}
+
 function CompanyModal({ onClose, editCompany }) {
   const qc = useQueryClient()
   const isEdit = !!editCompany
+  // company_types is a JSONB array in DB, e.g. ["client","supplier"]
+  const initType = isEdit
+    ? (Array.isArray(editCompany.company_types)
+        ? editCompany.company_types[0]
+        : (editCompany.company_type || 'client'))
+    : 'client'
   const [form, setForm] = useState(
     isEdit
       ? {
           name: editCompany.name || '',
-          companyType: editCompany.company_type || 'client',
+          companyType: initType,
           fiscalCode: editCompany.fiscal_code || '',
           city: editCompany.city || '',
           phone: editCompany.phone || '',
@@ -31,7 +47,18 @@ function CompanyModal({ onClose, editCompany }) {
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
   const mutation = useMutation({
-    mutationFn: (data) => isEdit ? api.put(`/companies/${editCompany.id}`, data) : api.post('/companies', data),
+    mutationFn: (data) => {
+      // Backend expects companyTypes (plural, array) — convert from singular select
+      const payload = {
+        name: data.name,
+        companyTypes: [data.companyType],
+        fiscalCode: data.fiscalCode,
+        city: data.city,
+        phone: data.phone,
+        email: data.email,
+      }
+      return isEdit ? api.put(`/companies/${editCompany.id}`, payload) : api.post('/companies', payload)
+    },
     onSuccess: () => {
       qc.invalidateQueries(['companies'])
       if (isEdit) qc.invalidateQueries(['company', editCompany.id])
@@ -141,7 +168,14 @@ function CompanyDetail({ company, onClose }) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="font-semibold text-slate-800">{company.name}</h3>
-            <p className="text-xs text-slate-400">{company.fiscal_code && `CIF: ${company.fiscal_code} • `}{company.city}</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {getCompanyTypes(company).map(t => (
+                <span key={t} className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[t] || 'bg-slate-100 text-slate-600'}`}>
+                  {TYPE_LABELS[t] || t}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-1">{company.fiscal_code && `CIF: ${company.fiscal_code} • `}{company.city}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setEditCompany(true)} className="btn-secondary text-xs flex items-center gap-1"><Pencil size={12} /> Editeaza</button>
@@ -254,21 +288,28 @@ export default function CompaniesPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {isLoading && <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">Se incarca...</td></tr>}
-            {data?.data?.map(c => (
-              <tr key={c.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelected(c)}>
-                <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[c.company_type] || 'bg-slate-100'}`}>
-                    {TYPE_LABELS[c.company_type] || c.company_type}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-400 text-xs hidden md:table-cell">{c.fiscal_code || '—'}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{c.city || '—'}</td>
-                <td className="px-4 py-3 text-right">
-                  <ChevronRight size={14} className="text-slate-300 ml-auto" />
-                </td>
-              </tr>
-            ))}
+            {data?.data?.map(c => {
+              const types = getCompanyTypes(c)
+              return (
+                <tr key={c.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelected(c)}>
+                  <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {types.map(t => (
+                        <span key={t} className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[t] || 'bg-slate-100 text-slate-600'}`}>
+                          {TYPE_LABELS[t] || t}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-400 text-xs hidden md:table-cell">{c.fiscal_code || '—'}</td>
+                  <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{c.city || '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <ChevronRight size={14} className="text-slate-300 ml-auto" />
+                  </td>
+                </tr>
+              )
+            })}
             {data?.data?.length === 0 && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                 <Building2 size={32} className="mx-auto mb-2 text-slate-300" />

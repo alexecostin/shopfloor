@@ -47,12 +47,52 @@ function GanttChart({ data = [] }) {
   )
 }
 
+// --------------- Config form helpers ---------------
+const CRITERIA_OPTIONS = [
+  { value: 'deadline', label: 'Deadline' },
+  { value: 'utilization', label: 'Utilizare masini' },
+  { value: 'setup_time', label: 'Timp setup' },
+  { value: 'cost', label: 'Cost' },
+]
+
+const CONSTRAINT_OPTIONS = [
+  { key: 'respect_shifts', label: 'Respecta turele configurate' },
+  { key: 'allow_overtime', label: 'Permite overtime' },
+  { key: 'respect_dependencies', label: 'Respecta dependinte BOM' },
+  { key: 'minimize_changeovers', label: 'Minimizeaza schimbarile' },
+]
+
+const DEFAULT_PRIORITIES = [
+  { criterion: 'deadline', weight: 40 },
+  { criterion: 'utilization', weight: 30 },
+  { criterion: 'setup_time', weight: 30 },
+]
+
+const DEFAULT_CONSTRAINTS = {
+  respect_shifts: true,
+  allow_overtime: false,
+  respect_dependencies: false,
+  minimize_changeovers: false,
+}
+
+function parsePriorities(raw) {
+  if (Array.isArray(raw)) return raw
+  if (typeof raw === 'string') { try { const p = JSON.parse(raw); if (Array.isArray(p)) return p } catch { /* ignore */ } }
+  return [...DEFAULT_PRIORITIES]
+}
+
+function parseConstraints(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw
+  if (typeof raw === 'string') { try { const c = JSON.parse(raw); if (c && typeof c === 'object') return c } catch { /* ignore */ } }
+  return { ...DEFAULT_CONSTRAINTS }
+}
+
 // --------------- Tab 1: Configurari ---------------
 function ConfigsTab() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ name: '', description: '', priorities: '[{"criterion":"deadline","weight":40},{"criterion":"utilization","weight":30},{"criterion":"setup_time","weight":30}]', constraints: '{"respect_shifts":true,"allow_overtime":false}' })
+  const [form, setForm] = useState({ name: '', description: '', priorities: [...DEFAULT_PRIORITIES], constraints: { ...DEFAULT_CONSTRAINTS } })
 
   const { data: configs = [], isLoading } = useQuery({
     queryKey: ['scheduling-configs'],
@@ -83,23 +123,43 @@ function ConfigsTab() {
     onError: e => toast.error(e.response?.data?.message || 'Eroare'),
   })
 
-  function closeForm() { setShowForm(false); setEditing(null); setForm({ name: '', description: '', priorities: '[{"criterion":"deadline","weight":40},{"criterion":"utilization","weight":30},{"criterion":"setup_time","weight":30}]', constraints: '{"respect_shifts":true,"allow_overtime":false}' }) }
+  function closeForm() { setShowForm(false); setEditing(null); setForm({ name: '', description: '', priorities: [...DEFAULT_PRIORITIES], constraints: { ...DEFAULT_CONSTRAINTS } }) }
   function openEdit(cfg) {
     setEditing(cfg)
     setForm({
       name: cfg.name || '',
       description: cfg.description || '',
-      priorities: typeof cfg.priorities === 'string' ? cfg.priorities : JSON.stringify(cfg.priorities || [], null, 2),
-      constraints: typeof cfg.constraints === 'string' ? cfg.constraints : JSON.stringify(cfg.constraints || {}, null, 2),
+      priorities: parsePriorities(cfg.priorities),
+      constraints: parseConstraints(cfg.constraints),
     })
     setShowForm(true)
   }
+
+  // Priorities helpers
+  const weightsSum = form.priorities.reduce((s, p) => s + (Number(p.weight) || 0), 0)
+  function setPriority(idx, key, val) {
+    const next = [...form.priorities]
+    next[idx] = { ...next[idx], [key]: key === 'weight' ? Number(val) || 0 : val }
+    setForm({ ...form, priorities: next })
+  }
+  function addPriority() {
+    const used = new Set(form.priorities.map(p => p.criterion))
+    const available = CRITERIA_OPTIONS.find(c => !used.has(c.value))
+    if (available) setForm({ ...form, priorities: [...form.priorities, { criterion: available.value, weight: 0 }] })
+  }
+  function removePriority(idx) {
+    setForm({ ...form, priorities: form.priorities.filter((_, i) => i !== idx) })
+  }
+  function toggleConstraint(key) {
+    setForm({ ...form, constraints: { ...form.constraints, [key]: !form.constraints[key] } })
+  }
+
   function handleSave() {
     const payload = {
       name: form.name,
       description: form.description,
-      priorities: typeof form.priorities === 'string' ? JSON.parse(form.priorities) : form.priorities,
-      constraints: typeof form.constraints === 'string' ? JSON.parse(form.constraints) : form.constraints,
+      priorities: form.priorities,
+      constraints: form.constraints,
     }
     if (editing) updateMut.mutate({ id: editing.id, ...payload })
     else createMut.mutate(payload)
@@ -150,22 +210,80 @@ function ConfigsTab() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-slate-800 mb-4">{editing ? 'Editeaza configuratie' : 'Configuratie noua'}</h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Nume *</label>
                 <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
               </div>
+
+              {/* Priorities — dynamic rows with dropdowns */}
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Prioritati (JSON)</label>
-                <textarea className="input font-mono text-xs" rows={4} placeholder='[{"criterion":"deadline","weight":40}]' value={form.priorities} onChange={e => setForm({ ...form, priorities: e.target.value })} />
-                <p className="text-[10px] text-slate-400 mt-1">Criteria: deadline, utilization, setup_time, cost. Weights trebuie sa insumeze 100.</p>
+                <label className="text-xs text-slate-500 mb-2 block">Prioritati</label>
+                <div className="space-y-2">
+                  {form.priorities.map((p, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        className="input flex-1"
+                        value={p.criterion}
+                        onChange={e => setPriority(idx, 'criterion', e.target.value)}
+                      >
+                        {CRITERIA_OPTIONS.map(c => (
+                          <option key={c.value} value={c.value} disabled={c.value !== p.criterion && form.priorities.some(pp => pp.criterion === c.value)}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="relative w-24 flex-shrink-0">
+                        <input
+                          className="input pr-6 text-right"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={p.weight}
+                          onChange={e => setPriority(idx, 'weight', e.target.value)}
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
+                      </div>
+                      <button
+                        onClick={() => removePriority(idx)}
+                        className="text-slate-300 hover:text-red-400 p-1"
+                        title="Sterge criteriu"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {form.priorities.length < CRITERIA_OPTIONS.length && (
+                  <button onClick={addPriority} className="text-xs text-blue-500 hover:text-blue-700 mt-2 flex items-center gap-1">
+                    <Plus size={12} /> Adauga criteriu
+                  </button>
+                )}
+                <p className={`text-[10px] mt-1 ${weightsSum === 100 ? 'text-green-600' : 'text-red-500'}`}>
+                  Total ponderi: {weightsSum}% {weightsSum !== 100 && '(trebuie sa fie 100%)'}
+                </p>
               </div>
+
+              {/* Constraints — checkboxes */}
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Constrangeri (JSON)</label>
-                <textarea className="input font-mono text-xs" rows={3} placeholder='{"respect_shifts":true}' value={form.constraints} onChange={e => setForm({ ...form, constraints: e.target.value })} />
+                <label className="text-xs text-slate-500 mb-2 block">Constrangeri</label>
+                <div className="space-y-2">
+                  {CONSTRAINT_OPTIONS.map(opt => (
+                    <label key={opt.key} className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={!!form.constraints[opt.key]}
+                        onChange={() => toggleConstraint(opt.key)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700 group-hover:text-slate-900">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Descriere</label>
                 <textarea className="input" rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
@@ -173,7 +291,7 @@ function ConfigsTab() {
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={closeForm} className="btn-secondary">Anuleaza</button>
-              <button onClick={handleSave} disabled={!form.name || createMut.isPending || updateMut.isPending} className="btn-primary">
+              <button onClick={handleSave} disabled={!form.name || weightsSum !== 100 || createMut.isPending || updateMut.isPending} className="btn-primary">
                 {(createMut.isPending || updateMut.isPending) ? 'Se salveaza...' : 'Salveaza'}
               </button>
             </div>
