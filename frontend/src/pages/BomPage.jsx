@@ -1266,6 +1266,14 @@ function MBOMVisualEditor({ orderId, onBack }) {
     return Array.isArray(machinesData) ? machinesData : machinesData?.data || []
   }, [machinesData])
 
+  // Documents attached to this work order — engineer sees them during MBOM planning
+  const { data: orderDocuments = [] } = useQuery({
+    queryKey: ['mbom-order-documents', orderId],
+    queryFn: () => api.get(`/documents/for/work_order/${orderId}`).then(r => r.data),
+    enabled: !!orderId,
+  })
+  const [showDocPanel, setShowDocPanel] = useState(false)
+
   // ─── Mutations ────────────────────────────────────────────────────────────
 
   const updateOpMut = useMutation({
@@ -1517,6 +1525,56 @@ function MBOMVisualEditor({ orderId, onBack }) {
             </p>
           </div>
         </div>
+
+        {/* Documente comanda — vizibile rapid pentru inginer */}
+        {orderDocuments.length > 0 && (
+          <div className="shrink-0 border-b border-slate-200 bg-purple-50">
+            <button
+              onClick={() => setShowDocPanel(p => !p)}
+              className="w-full px-4 py-2 flex items-center justify-between text-sm hover:bg-purple-100 transition-colors"
+            >
+              <span className="flex items-center gap-2 font-medium text-purple-800">
+                <FileText size={15} className="text-purple-600" />
+                Documente tehnice comanda ({orderDocuments.length})
+              </span>
+              <ChevronDown size={14} className={`text-purple-400 transition-transform ${showDocPanel ? 'rotate-180' : ''}`} />
+            </button>
+            {showDocPanel && (
+              <div className="px-4 pb-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {orderDocuments.map(doc => {
+                  const rev = doc.revisions?.find(r => r.id === doc.current_revision_id) || doc.revisions?.[0]
+                  const isImage = rev?.mime_type?.startsWith('image/') || rev?.file_name?.match(/\.(jpg|jpeg|png|gif)$/i)
+                  const isPdf = rev?.mime_type === 'application/pdf' || rev?.file_name?.match(/\.pdf$/i)
+                  return (
+                    <div key={doc.id} className="bg-white rounded-lg border border-purple-200 p-2.5 flex items-start gap-2.5">
+                      <div className="w-10 h-10 rounded bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        {isImage ? <FileText size={18} className="text-green-600" /> : <FileText size={18} className="text-purple-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-800 truncate">{doc.title}</p>
+                        <p className="text-[10px] text-slate-400">{doc.document_type} • Rev. {rev?.revision_code || '—'}</p>
+                        <div className="flex gap-2 mt-1">
+                          {rev?.file_path && (
+                            <a href={`/uploads/${rev.file_path}`} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+                              <Eye size={10} /> Deschide
+                            </a>
+                          )}
+                          {rev?.file_path && (
+                            <a href={`/uploads/${rev.file_path}`} download
+                              className="text-[10px] text-slate-500 hover:underline flex items-center gap-0.5">
+                              Descarca
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* MBOM Reuse Banner */}
         {reusableProduct && allOperations.length === 0 && !reuseDismissed && (
