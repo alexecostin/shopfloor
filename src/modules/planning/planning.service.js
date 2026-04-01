@@ -1,6 +1,7 @@
 import db from '../../config/db.js';
 import * as shiftService from '../../services/shift.service.js';
 import { escapeLike } from '../../utils/sanitize.js';
+import { getTenantConfig } from '../../services/app-config.service.js';
 
 // ─── Master Plans ─────────────────────────────────────────────────────────────
 
@@ -59,10 +60,11 @@ async function recalculateCapacity(machineId, planDate, masterPlanId) {
 
   const plannedHours = Number(total) || 0;
 
-  // Load shift constraints from default scheduling config
-  let maxShiftsPerDay = 2;
-  let overtimePercent = 10;
-  const hoursPerShift = 7.5;
+  // Load shift constraints from default scheduling config, fall back to tenant config
+  const tenantCfg = await getTenantConfig(null).catch(() => ({}));
+  let maxShiftsPerDay = tenantCfg.defaultMaxShiftsPerDay || 2;
+  let overtimePercent = tenantCfg.defaultOvertimePercent || 10;
+  const hoursPerShift = tenantCfg.defaultHoursPerShift || 7.5;
   try {
     const config = await db('planning.scheduling_configs').where('is_default', true).first();
     if (config?.constraints) {
@@ -351,8 +353,10 @@ export async function getMachineLoad(machineId, dateFrom, dateTo) {
     .whereNot('status', 'cancelled')
     .orderBy('plan_date');
 
-  // Get available hours per day
-  let availableHoursPerDay = 16;
+  // Get available hours per day from shift config, fall back to tenant config
+  const machineLoadTenantCfg = await getTenantConfig(null).catch(() => ({}));
+  const defaultMaxHours = (machineLoadTenantCfg.defaultMaxShiftsPerDay || 2) * (machineLoadTenantCfg.defaultHoursPerShift || 7.5);
+  let availableHoursPerDay = defaultMaxHours || 16;
   try {
     const { totalHours } = await shiftService.getAvailableHours(machineId, dateFrom);
     if (totalHours > 0) availableHoursPerDay = totalHours;

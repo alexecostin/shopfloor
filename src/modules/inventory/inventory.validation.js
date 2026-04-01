@@ -25,7 +25,7 @@ export const createMovement = Joi.object({
   movementType: Joi.string().valid(
     'receipt', 'production_input', 'production_output', 'shipment',
     'adjustment_plus', 'adjustment_minus', 'scrap', 'return_supplier', 'transfer'
-  ).required(),
+  ).required(), // matches CHECK constraint on inventory.movements.movement_type
   qty: Joi.number().precision(2).positive().required(),
   referenceType: Joi.string().max(50).allow('', null),
   referenceId: Joi.string().uuid().allow(null),

@@ -1,6 +1,7 @@
 import { resend, EMAIL_FROM, NOTIFICATIONS_ENABLED, logger } from '../config/email.js';
 import db from '../config/db.js';
 import { getTemplate, renderTemplate } from './email-templates.service.js';
+import { getTenantConfig } from './app-config.service.js';
 
 export async function sendEmail({ to, subject, html }) {
   if (!NOTIFICATIONS_ENABLED) {
@@ -51,7 +52,13 @@ export async function sendNotification({ type, data }) {
 
     case 'machine_stop': {
       const { machineCode, reason, category } = data;
-      if (category !== 'Defect utilaj') return;
+      // Check if category is an equipment defect type from lookup_values
+      const defectCategories = await db('system.lookup_values')
+        .where({ lookup_type: 'stop_category', category: 'equipment_defect' })
+        .select('value')
+        .then(rows => rows.map(r => r.value))
+        .catch(() => ['Defect utilaj', 'defect_utilaj']);
+      if (!defectCategories.includes(category)) return;
       const to = await getUsersByRole(['production_manager']);
       if (!to.length) return;
       const tenantId = data.tenantId || null;
@@ -92,7 +99,9 @@ export async function sendNotification({ type, data }) {
 
     case 'oee_low': {
       const { machineCode, oee } = data;
-      if (oee >= 0.6) return;
+      const emailConfig = await getTenantConfig(data.tenantId || null).catch(() => ({}));
+      const oeeThreshold = (emailConfig.oeeAlertThreshold || 60) / 100;
+      if (oee >= oeeThreshold) return;
       const to = await getUsersByRole(['production_manager']);
       if (!to.length) return;
       const tenantId = data.tenantId || null;

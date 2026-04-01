@@ -1,8 +1,13 @@
 import db from '../config/db.js';
 import { escapeLike } from '../utils/sanitize.js';
+import { getTenantConfig } from './app-config.service.js';
 
-const MACHINE_HOURLY_RATE_DEFAULT = 25; // EUR/hour default
-const LABOR_HOURLY_RATE_DEFAULT = 15; // EUR/hour default
+// These are resolved dynamically from tenant config; see _getCostDefaults()
+let _costConfig = null;
+async function _getCostDefaults() {
+  if (!_costConfig) _costConfig = await getTenantConfig(null).catch(() => ({}));
+  return _costConfig;
+}
 
 /**
  * Calculate full order cost: planned vs actual vs estimated final.
@@ -10,6 +15,10 @@ const LABOR_HOURLY_RATE_DEFAULT = 15; // EUR/hour default
 export async function calculateOrderCost(orderId) {
   const order = await db('production.orders').where('id', orderId).first();
   if (!order) return null;
+
+  const costDefaults = await _getCostDefaults();
+  const MACHINE_HOURLY_RATE_DEFAULT = costDefaults.defaultMachineHourlyRate || 25;
+  const LABOR_HOURLY_RATE_DEFAULT = costDefaults.defaultLaborHourlyRate || 15;
 
   // ── PLANNED COST (from BOM) ──────────────────────────────────────────────
   let plannedMaterialCost = 0;
@@ -186,6 +195,9 @@ export async function getCostByProduct(productId) {
 }
 
 export async function getCostByMachine({ dateFrom, dateTo, machineId }) {
+  const machineCostDefaults = await _getCostDefaults();
+  const MACHINE_HOURLY_RATE_DEFAULT = machineCostDefaults.defaultMachineHourlyRate || 25;
+
   let q = db('production.reports as r')
     .join('machines.machines as m', 'r.machine_id', 'm.id')
     .select(

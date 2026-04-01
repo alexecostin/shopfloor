@@ -30,12 +30,11 @@ export const registerSchema = Joi.object({
     'any.required': 'Numele complet este obligatoriu.',
   }),
   role: Joi.string()
-    .valid('admin', 'production_manager', 'shift_leader', 'operator', 'maintenance')
+    .max(50)
     .required()
     .messages({
-      'any.only': 'Rolul ales este invalid.',
       'any.required': 'Rolul este obligatoriu.',
-    }),
+    }), // role values validated against auth.roles table in service layer
   badgeNumber: Joi.string().max(50).optional().allow(''),
   phone: Joi.string().max(50).optional().allow(''),
 });
@@ -43,8 +42,8 @@ export const registerSchema = Joi.object({
 export const updateUserSchema = Joi.object({
   fullName: Joi.string().min(2).max(255).optional(),
   role: Joi.string()
-    .valid('admin', 'production_manager', 'shift_leader', 'operator', 'maintenance')
-    .optional(),
+    .max(50)
+    .optional(), // role values validated against auth.roles table in service layer
   badgeNumber: Joi.string().max(50).optional().allow(''),
   phone: Joi.string().max(50).optional().allow(''),
   isActive: Joi.boolean().optional(),

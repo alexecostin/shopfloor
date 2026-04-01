@@ -1,6 +1,7 @@
 import db from '../../config/db.js';
 import { applyScopeFilter } from '../../middleware/scopeFilter.js';
 import * as shiftService from '../../services/shift.service.js';
+import { getTenantConfig } from '../../services/app-config.service.js';
 
 function extractTenant(req) {
   return {
@@ -187,8 +188,9 @@ export async function closeShift(id, { notesOutgoing } = {}) {
 // ── OEE ──────────────────────────────────────────────────────────────────────
 
 export async function getOEE({ machineId, date, shift } = {}) {
-  // Get planned production time from shift config
-  let shiftDuration = 480; // fallback
+  // Get planned production time from shift config, fall back to tenant config
+  const oeeCfg = await getTenantConfig(null).catch(() => ({}));
+  let shiftDuration = oeeCfg.defaultShiftDurationMinutes || 450; // fallback from config
   if (machineId && date) {
     try {
       const { totalHours } = await shiftService.getAvailableHours(machineId, date);

@@ -1,4 +1,5 @@
 import db from '../config/db.js';
+import { getTenantConfig } from './app-config.service.js';
 
 async function createAlertIfNew(ruleCode, entityType, entityId, title, message, metadata = {}, suggestedActions = []) {
   // Check if an active alert already exists for this entity+rule
@@ -38,6 +39,7 @@ async function createAlertIfNew(ruleCode, entityType, entityId, title, message, 
 
 export async function checkAllRules() {
   const results = { checked: 0, triggered: 0, errors: [] };
+  const alertConfig = await getTenantConfig(null).catch(() => ({}));
 
   try {
     // 1. STOCK LOW
@@ -59,20 +61,22 @@ export async function checkAllRules() {
 
   try {
     // 2. ORDER AT RISK — orders active with no recent production
+    const noReportDays = alertConfig.alertNoReportDays || 3;
+    const orderInactiveDays = alertConfig.alertOrderInactiveDays || 7;
     const stuckOrders = await db('production.orders as o')
       .where('o.status', 'active')
       .whereNotExists(
         db('production.reports as r')
           .where('r.order_id', db.raw('o.id'))
-          .where('r.reported_at', '>=', db.raw("NOW() - INTERVAL '3 days'"))
+          .where('r.reported_at', '>=', db.raw(`NOW() - INTERVAL '${noReportDays} days'`))
       )
-      .where('o.created_at', '<=', db.raw("NOW() - INTERVAL '7 days'"))
+      .where('o.created_at', '<=', db.raw(`NOW() - INTERVAL '${orderInactiveDays} days'`))
       .select('o.id', 'o.order_number', 'o.product_name');
     results.checked++;
     for (const order of stuckOrders) {
       const a = await createAlertIfNew('order_at_risk', 'order', order.id,
         `Comanda la risc: ${order.order_number}`,
-        `Comanda ${order.order_number} (${order.product_name}) nu are rapoarte de productie in ultimele 3 zile.`,
+        `Comanda ${order.order_number} (${order.product_name}) nu are rapoarte de productie in ultimele ${noReportDays} zile.`,
         { order_id: order.id },
         ['Verifica statusul comenzii', 'Contacteaza seful de tura']
       );
@@ -81,7 +85,9 @@ export async function checkAllRules() {
   } catch (e) { results.errors.push(`order_at_risk: ${e.message}`); }
 
   try {
-    // 3. OEE LOW — last 3 shifts average OEE below 60%
+    // 3. OEE LOW — last N shifts average OEE below threshold
+    const oeeCheckShifts = alertConfig.alertOeeCheckShifts || 3;
+    const oeeThreshold = alertConfig.oeeAlertThreshold || 60;
     const machines = await db('machines.machines').where('status', 'active').select('id', 'code', 'name');
     results.checked++;
     for (const machine of machines) {
@@ -89,18 +95,18 @@ export async function checkAllRules() {
         .join('production.orders as o', 'r.order_id', 'o.id')
         .where('r.machine_id', machine.id)
         .orderBy('r.reported_at', 'desc')
-        .limit(3)
+        .limit(oeeCheckShifts)
         .select('r.good_pieces', 'r.scrap_pieces');
-      if (recentReports.length < 3) continue;
+      if (recentReports.length < oeeCheckShifts) continue;
       const totalPieces = recentReports.reduce((s, r) => s + Number(r.good_pieces) + Number(r.scrap_pieces), 0);
       const goodPieces = recentReports.reduce((s, r) => s + Number(r.good_pieces), 0);
       const quality = totalPieces > 0 ? goodPieces / totalPieces : 0;
       // Simplified OEE: just quality rate (no availability/performance data readily available)
       const oee = quality * 100;
-      if (oee < 60) {
+      if (oee < oeeThreshold) {
         const a = await createAlertIfNew('oee_low', 'machine', machine.id,
           `OEE scazut: ${machine.code}`,
-          `Masina ${machine.code} are OEE estimat de ${oee.toFixed(1)}% in ultimele 3 ture (sub pragul de 60%).`,
+          `Masina ${machine.code} are OEE estimat de ${oee.toFixed(1)}% in ultimele ${oeeCheckShifts} ture (sub pragul de ${oeeThreshold}%).`,
           { machine_id: machine.id, oee },
           ['Analizeaza cauzele de rebut', 'Verifica parametrii de productie', 'Planifica mentenanta preventiva']
         );
@@ -116,9 +122,10 @@ export async function checkAllRules() {
       .where('status', 'active')
       .whereNotNull('maintenance_interval_cycles');
     results.checked++;
+    const toolCyclesThreshold = alertConfig.alertToolCyclesPercent || 90;
     for (const tool of tools) {
       const pct = (tool.current_cycles / tool.maintenance_interval_cycles) * 100;
-      if (pct >= 90) {
+      if (pct >= toolCyclesThreshold) {
         const a = await createAlertIfNew('tool_cycles_high', 'machine', tool.current_machine_id,
           `Scula aproape de limita: ${tool.code}`,
           `Scula ${tool.code} a atins ${pct.toFixed(0)}% din intervalul de mentenanta (${tool.current_cycles}/${tool.maintenance_interval_cycles} cicluri).`,
@@ -131,11 +138,12 @@ export async function checkAllRules() {
   } catch (e) { results.errors.push(`tool_cycles_high: ${e.message}`); }
 
   try {
-    // 5. MAINTENANCE APPROACHING — next_due_date within 14 days
+    // 5. MAINTENANCE APPROACHING — next_due_date within configured look-ahead days
+    const maintenanceLookAhead = alertConfig.alertMaintenanceLookAheadDays || 14;
     const approachingMaintenances = await db('machines.maintenance_schedules as ms')
       .join('machines.machines as m', 'ms.machine_id', 'm.id')
       .whereNotNull('ms.next_due_date')
-      .whereRaw('ms.next_due_date <= CURRENT_DATE + INTERVAL \'14 days\'')
+      .whereRaw(`ms.next_due_date <= CURRENT_DATE + INTERVAL '${maintenanceLookAhead} days'`)
       .whereRaw('ms.next_due_date >= CURRENT_DATE')
       .where('ms.is_active', true)
       .select('ms.*', 'm.name as machine_name', 'm.code as machine_code')

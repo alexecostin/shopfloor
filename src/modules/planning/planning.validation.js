@@ -20,7 +20,7 @@ export const updateMasterPlan = Joi.object({
 export const createAllocation = Joi.object({
   masterPlanId: Joi.string().uuid().required(),
   planDate: Joi.date().required(),
-  shift: Joi.string().valid('Tura I', 'Tura II', 'Tura III').required(),
+  shift: Joi.string().max(50).required(), // shift names come from shifts.shift_definitions
   machineId: Joi.string().uuid().required(),
   productId: Joi.string().uuid().allow(null),
   productReference: Joi.string().max(100).allow('', null),

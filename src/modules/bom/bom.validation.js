@@ -6,7 +6,7 @@ export const createProduct = Joi.object({
   variant: Joi.string().max(100).allow('', null),
   clientName: Joi.string().max(255).allow('', null),
   clientPartNumber: Joi.string().max(100).allow('', null),
-  productType: Joi.string().valid('raw_material', 'semi_finished', 'finished', 'component').default('finished'),
+  productType: Joi.string().valid('raw_material', 'semi_finished', 'finished', 'component').default('finished'), // matches CHECK constraint on bom.products.product_type
   containerType: Joi.string().max(100).allow('', null),
   qtyPerContainer: Joi.number().integer().min(1).allow(null),
   weightPieceKg: Joi.number().precision(4).allow(null),

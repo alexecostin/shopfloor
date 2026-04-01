@@ -4,6 +4,7 @@
  * care necesita aprobare.
  */
 import db from '../config/db.js';
+import { getTenantConfig } from './app-config.service.js';
 
 /**
  * Replanifica automat productia cand o masina e scoasa din uz.
@@ -15,6 +16,8 @@ import db from '../config/db.js';
  * @returns {{ replanId, movedCount, failedCount, details[] }}
  */
 export async function replanForMachineDowntime(machineId, startDate, endDate, reason, userId) {
+  const replanConfig = await getTenantConfig(null).catch(() => ({}));
+
   // 1. Find affected allocations
   const affected = await db('planning.daily_allocations')
     .where('machine_id', machineId)
@@ -73,7 +76,7 @@ export async function replanForMachineDowntime(machineId, startDate, endDate, re
         .sum('planned_hours as total');
 
       const currentLoad = Number(existing[0]?.total) || 0;
-      const maxHours = 22; // max hours/day (safety margin)
+      const maxHours = replanConfig.defaultMaxHoursPerDay || 22; // max hours/day from config
       const needed = Number(alloc.planned_hours) || 8;
 
       if (currentLoad + needed <= maxHours) {

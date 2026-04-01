@@ -1,5 +1,6 @@
 import db from '../config/db.js';
 import { aggregatePiecesFromOrders } from './piece-planning.service.js';
+import { getTenantConfig } from './app-config.service.js';
 
 /**
  * Smart Auto-Scheduling Algorithm.
@@ -16,10 +17,11 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
   // Load config
   const config = configId ? await db('planning.scheduling_configs').where('id', configId).first() : null;
   const constraints = config?.constraints || {};
-  const maxShifts = Number(constraints.max_shifts_per_day) || 2;
-  const overtimePercent = Number(constraints.overtime_percent) || 10;
+  const tenantConfig = await getTenantConfig(null).catch(() => ({}));
+  const maxShifts = Number(constraints.max_shifts_per_day) || tenantConfig.defaultMaxShiftsPerDay || 2;
+  const overtimePercent = Number(constraints.overtime_percent) || tenantConfig.defaultOvertimePercent || 10;
   const allowWeekend = constraints.allow_weekend || false;
-  const hoursPerShift = 7.5;
+  const hoursPerShift = tenantConfig.defaultHoursPerShift || 7.5;
   const maxHoursPerDay = maxShifts * hoursPerShift * (1 + overtimePercent / 100);
 
   // Get aggregated pieces
@@ -82,8 +84,12 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
   for (const piece of sortedPieces) {
     let opStartDate = new Date(periodStart);
 
-    // Calculate lot transfer size
-    const lotTransfer = Math.max(5, Math.min(100, Math.ceil(piece.remainingQuantity * 0.1)));
+    // Calculate lot transfer size from config
+    const lotTransfer = Math.max(
+      tenantConfig.lotTransferMinPieces || 5,
+      Math.min(tenantConfig.lotTransferMaxPieces || 100,
+        Math.ceil(piece.remainingQuantity * (tenantConfig.lotTransferPercent || 10) / 100))
+    );
 
     for (const op of piece.operations) {
       // Find best machine for this operation
@@ -194,7 +200,11 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
     orderImpact: Object.values(orderCompletionDates),
     lotTransfers: sortedPieces.map(p => ({
       piece: p.productReference,
-      suggestedLot: Math.max(5, Math.min(100, Math.ceil(p.remainingQuantity * 0.1))),
+      suggestedLot: Math.max(
+        tenantConfig.lotTransferMinPieces || 5,
+        Math.min(tenantConfig.lotTransferMaxPieces || 100,
+          Math.ceil(p.remainingQuantity * (tenantConfig.lotTransferPercent || 10) / 100))
+      ),
       totalQty: p.remainingQuantity,
     })),
   };

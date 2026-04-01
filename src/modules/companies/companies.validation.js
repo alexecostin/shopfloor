@@ -11,11 +11,11 @@ export const createCompany = Joi.object({
   tradeRegister: Joi.string().max(50).allow('', null),
   address: Joi.string().allow('', null),
   city: Joi.string().max(100).allow('', null),
-  country: Joi.string().max(100).default('Romania'),
+  country: Joi.string().max(100).allow('', null), // default applied from tenant config in service layer
   phone: Joi.string().max(50).allow('', null),
   email: Joi.string().email({ tlds: { allow: false } }).allow('', null),
   website: Joi.string().max(255).allow('', null),
-  paymentTermsDays: Joi.number().integer().min(0).default(30),
+  paymentTermsDays: Joi.number().integer().min(0).allow(null), // default applied from tenant config in service layer
   notes: Joi.string().allow('', null),
   isActive: Joi.boolean().default(true),
 });

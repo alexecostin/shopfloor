@@ -1,5 +1,6 @@
 import db from '../config/db.js';
 import * as shiftService from './shift.service.js';
+import { getTenantConfig } from './app-config.service.js';
 
 /**
  * Estimate earliest completion date for a given product and quantity.
@@ -41,7 +42,8 @@ export async function estimateDelivery(productReference, quantity, options = {})
   }
 
   // Available hours per day: shifts × hours per shift × (1 + overtime)
-  const hoursPerShift = 7.5; // default, should come from shift config
+  const config = await getTenantConfig(null).catch(() => ({}));
+  const hoursPerShift = config.defaultHoursPerShift || 7.5;
   const availableHoursPerDay = maxShifts * hoursPerShift * (1 + overtimePercent / 100);
 
   // Rough estimate: sequential operations

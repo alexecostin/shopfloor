@@ -1,4 +1,5 @@
 import db from '../../config/db.js';
+import { getTenantConfig } from '../../services/app-config.service.js';
 
 export async function listElements(tenantId) {
   const q = db('costs.cost_element_definitions').orderBy('sort_order');
@@ -94,7 +95,8 @@ export async function getOperatorHourlyRate(userId, tenantId) {
       .whereNull('valid_to').first().catch(() => null);
     if (perSkill) return parseFloat(perSkill.hourly_rate);
   }
-  return 10; // default €10/hr
+  const opRateConfig = await getTenantConfig(tenantId).catch(() => ({}));
+  return opRateConfig.defaultOperatorHourlyRate || 10; // fallback from tenant config
 }
 
 export async function listOverhead(tenantId) {

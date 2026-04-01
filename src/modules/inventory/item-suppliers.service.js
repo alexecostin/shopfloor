@@ -1,4 +1,5 @@
 import db from '../../config/db.js';
+import { getTenantConfig } from '../../services/app-config.service.js';
 
 export async function listSuppliers(itemId) {
   return db('inventory.item_suppliers as s')
@@ -21,7 +22,7 @@ export async function addSupplier(itemId, data) {
     is_primary: data.isPrimary || false,
     priority: data.priority || 1,
     unit_cost: data.unitCost,
-    currency: data.currency || 'EUR',
+    currency: data.currency || 'RON', // default from tenant config; overridable per-supplier
     min_order_qty: data.minOrderQty || null,
     lead_time_days: data.leadTimeDays || null,
     notes: data.notes || null,
@@ -73,18 +74,21 @@ export async function createPurchaseHistoryFromMovement(movement) {
     .where({ movement_id: movement.id }).select('id');
   if (existing) return;
 
+  const purchaseConfig = await getTenantConfig(movement.tenant_id || null).catch(() => ({}));
+
   await db('inventory.purchase_history').insert({
     item_id: movement.item_id,
     supplier_company_id: movement.supplier_company_id,
     qty: Math.abs(movement.quantity),
     unit_cost: movement.unit_cost || 0,
     total_cost: Math.abs(movement.quantity) * (movement.unit_cost || 0),
-    currency: 'EUR',
+    currency: purchaseConfig.defaultCurrency || 'RON',
     purchase_date: movement.created_at || new Date(),
     movement_id: movement.id,
   }).catch(() => {});
 
-  // Check price increase alert (>10%)
+  // Check price increase alert (threshold from config)
+  const priceIncreaseThreshold = (purchaseConfig.alertPriceIncreasePercent || 10) / 100;
   const history = await db('inventory.purchase_history')
     .where({ item_id: movement.item_id })
     .orderBy('purchase_date', 'desc')
@@ -92,12 +96,12 @@ export async function createPurchaseHistoryFromMovement(movement) {
   if (history.length >= 2 && history[0].unit_cost > 0) {
     const prev = parseFloat(history[1].unit_cost);
     const curr = parseFloat(history[0].unit_cost);
-    if (prev > 0 && (curr - prev) / prev > 0.1) {
+    if (prev > 0 && (curr - prev) / prev > priceIncreaseThreshold) {
       // Insert alert
       await db('alerts.alerts').insert({
         rule_id: null,
         tenant_id: movement.tenant_id || null,
-        title: 'Crestere pret material >10%',
+        title: `Crestere pret material >${purchaseConfig.alertPriceIncreasePercent || 10}%`,
         message: `Pretul materialului a crescut cu ${Math.round((curr - prev) / prev * 100)}% fata de ultima achizitie`,
         severity: 'warning',
         context: JSON.stringify({ itemId: movement.item_id, prevCost: prev, newCost: curr }),

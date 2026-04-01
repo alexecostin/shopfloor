@@ -1,6 +1,18 @@
 import db from '../../config/db.js';
 import { generateSchedule as runScheduler } from '../../services/scheduler.service.js';
 
+// Cache shift definitions to avoid repeated queries
+let _shiftDefCache = null;
+let _shiftDefCacheTime = 0;
+async function getShiftDef(shiftName) {
+  const now = Date.now();
+  if (!_shiftDefCache || (now - _shiftDefCacheTime) > 5 * 60 * 1000) {
+    _shiftDefCache = await db('shifts.shift_definitions').select('*').catch(() => []);
+    _shiftDefCacheTime = now;
+  }
+  return _shiftDefCache.find(s => s.shift_name === shiftName) || null;
+}
+
 // ─── CONFIGS ─────────────────────────────────────────────────────────────────
 
 export const listConfigs = () => db('planning.scheduling_configs').orderBy('is_default', 'desc').orderBy('created_at', 'desc');
@@ -90,10 +102,12 @@ export const getGanttData = async ({ runId, dateFrom, dateTo }) => {
     const dateKey = row.planned_date instanceof Date ? row.planned_date.toISOString().split('T')[0] : row.planned_date;
     if (!machineMap[row.mid].days[dateKey]) machineMap[row.mid].days[dateKey] = [];
     const color = row.status === 'conflict' ? '#ef4444' : row.status === 'applied' ? '#22c55e' : '#3b82f6';
+    // Read shift start/end times from shift_definitions, fall back to defaults
+    const shiftDef = await getShiftDef(row.planned_shift);
     machineMap[row.mid].days[dateKey].push({
       id: row.id,
-      startTime: row.planned_shift === 'Tura I' ? '06:00' : row.planned_shift === 'Tura II' ? '14:00' : '22:00',
-      endTime: row.planned_shift === 'Tura I' ? '14:00' : row.planned_shift === 'Tura II' ? '22:00' : '06:00',
+      startTime: shiftDef?.start_time || '06:00',
+      endTime: shiftDef?.end_time || '14:00',
       productName: row.product_name,
       productCode: row.product_code,
       qty: row.quantity,

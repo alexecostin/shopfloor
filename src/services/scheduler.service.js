@@ -1,5 +1,6 @@
 import db from '../config/db.js';
 import * as shiftService from './shift.service.js';
+import { getTenantConfig } from './app-config.service.js';
 
 /**
  * Main scheduling algorithm.
@@ -51,10 +52,11 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
   ];
   const constraints = config?.constraints || { respect_shifts: true, planning_granularity: 'shift' };
 
-  // Shift constraints
-  const maxShiftsPerDay = Number(constraints.max_shifts_per_day) || 2;
-  const overtimePercent = Number(constraints.overtime_percent) || 10;
-  const hoursPerShift = 7.5;
+  // Shift constraints — read from scheduling config, then fall back to tenant config
+  const tenantConfig = await getTenantConfig(null).catch(() => ({}));
+  const maxShiftsPerDay = Number(constraints.max_shifts_per_day) || tenantConfig.defaultMaxShiftsPerDay || 2;
+  const overtimePercent = Number(constraints.overtime_percent) || tenantConfig.defaultOvertimePercent || 10;
+  const hoursPerShift = tenantConfig.defaultHoursPerShift || 7.5;
 
   // ─── 2. LOAD DATA ─────────────────────────────────────────────────────────
 
@@ -94,10 +96,10 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
     const remaining = Math.max(0, order.target_quantity - done);
     if (remaining === 0) continue;
 
-    // Estimate deadline: order created_at + 30 days default (no deadline field in schema)
+    // Estimate deadline: order created_at + configurable default days
     const created = new Date(order.created_at);
     const deadline = new Date(created);
-    deadline.setDate(deadline.getDate() + 30);
+    deadline.setDate(deadline.getDate() + (tenantConfig.defaultDeadlineDays || 30));
     deadlineMap[order.id] = deadline;
 
     if (bomOps.length === 0) {
@@ -109,13 +111,13 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
         assignedMachineId: order.machine_id,
         quantity: remaining,
         deadline,
-        piecesPerHour: 10, // default
+        piecesPerHour: tenantConfig.defaultPiecesPerHour || 10,
         setupMinutes: 0,
         dependsOn: [],
       });
     } else {
       for (const op of bomOps.sort((a, b) => (a.sequence || 0) - (b.sequence || 0))) {
-        const piecesPerHour = op.pieces_per_hour || 10;
+        const piecesPerHour = op.pieces_per_hour || tenantConfig.defaultPiecesPerHour || 10;
         toSchedule.push({
           order,
           operation: op,

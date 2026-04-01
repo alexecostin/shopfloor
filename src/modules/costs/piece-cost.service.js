@@ -1,5 +1,6 @@
 import db from '../../config/db.js';
 import { getMachineCostConfig, getEffectiveHourlyRate, getOperatorHourlyRate, listElements, listOverhead } from './cost-config.service.js';
+import { getTenantConfig } from '../../services/app-config.service.js';
 
 export async function calculatePieceCost(productId, options = {}) {
   const { machineId, operatorId, quantity = 1, tenantId } = options;
@@ -92,7 +93,8 @@ export async function calculatePieceCost(productId, options = {}) {
     const overheadConfigs = await listOverhead(tenantId);
     const activeOverhead = overheadConfigs.filter(o => o.is_active);
     let overheadTotal = 0;
-    const estimatedMonthlyPieces = 1000; // default
+    const pieceCostConfig = await getTenantConfig(tenantId).catch(() => ({}));
+    const estimatedMonthlyPieces = pieceCostConfig.defaultMonthlyPiecesEstimate || 1000;
     for (const oh of activeOverhead) {
       if (oh.overhead_type === 'percentage') {
         overheadTotal += result.subtotal * (parseFloat(oh.value) / 100);

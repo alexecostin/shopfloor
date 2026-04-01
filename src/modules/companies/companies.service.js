@@ -1,5 +1,6 @@
 import db from '../../config/db.js';
 import { escapeLike } from '../../utils/sanitize.js';
+import { getTenantConfig } from '../../services/app-config.service.js';
 
 // ─── Companies ────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ export async function getCompany(id) {
 }
 
 export async function createCompany(data) {
+  const companyConfig = await getTenantConfig(null).catch(() => ({}));
   const [company] = await db('companies.companies').insert({
     name: data.name,
     company_types: data.companyTypes ? JSON.stringify(data.companyTypes) : (data.companyType ? JSON.stringify([data.companyType]) : JSON.stringify(['client'])),
@@ -29,11 +31,11 @@ export async function createCompany(data) {
     trade_register: data.tradeRegister,
     address: data.address,
     city: data.city,
-    country: data.country || 'Romania',
+    country: data.country || companyConfig.defaultCountry || 'Romania',
     phone: data.phone,
     email: data.email,
     website: data.website,
-    payment_terms_days: data.paymentTermsDays ?? 30,
+    payment_terms_days: data.paymentTermsDays ?? companyConfig.defaultPaymentTermsDays ?? 30,
     notes: data.notes,
     is_active: data.isActive !== false,
   }).returning('*');

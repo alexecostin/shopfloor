@@ -1,17 +1,28 @@
 import db from '../config/db.js';
 import * as shiftService from './shift.service.js';
+import { getTenantConfig } from './app-config.service.js';
 
 export async function calculateMTBF(machineId, dateFrom, dateTo) {
+  // Look up equipment defect categories from lookup_values, fall back to known defaults
+  const defectCategories = await db('system.lookup_values')
+    .where({ lookup_type: 'stop_category', category: 'equipment_defect' })
+    .select('value')
+    .then(rows => rows.map(r => r.value))
+    .catch(() => []);
+  const defectFilter = defectCategories.length > 0 ? defectCategories : ['defect_utilaj', 'Defect utilaj'];
+
   const stops = await db('production.stops')
     .where('machine_id', machineId)
     .where('started_at', '>=', dateFrom)
     .where('started_at', '<=', dateTo)
-    .whereIn('category', ['defect_utilaj', 'Defect utilaj']);
+    .whereIn('category', defectFilter);
 
   const defectCount = stops.length;
   if (defectCount === 0) return { mtbf: Infinity, defects: 0, operatingHours: 0 };
 
-  // Get total available hours from shift config
+  // Get total available hours from shift config, fall back to tenant config
+  const kpiConfig = await getTenantConfig(null).catch(() => ({}));
+  const fallbackHoursPerDay = (kpiConfig.defaultMaxShiftsPerDay || 2) * (kpiConfig.defaultHoursPerShift || 7.5);
   let totalHours = 0;
   const current = new Date(dateFrom);
   const end = new Date(dateTo);
@@ -20,7 +31,7 @@ export async function calculateMTBF(machineId, dateFrom, dateTo) {
       const { totalHours: dayHours } = await shiftService.getAvailableHours(machineId, current.toISOString().split('T')[0]);
       totalHours += dayHours;
     } catch {
-      totalHours += 16; // fallback
+      totalHours += fallbackHoursPerDay;
     }
     current.setDate(current.getDate() + 1);
   }
@@ -62,6 +73,8 @@ export async function calculateMTTR(machineId, dateFrom, dateTo) {
 }
 
 export async function calculateAvailability(machineId, dateFrom, dateTo) {
+  const availConfig = await getTenantConfig(null).catch(() => ({}));
+  const availFallbackHours = (availConfig.defaultMaxShiftsPerDay || 2) * (availConfig.defaultHoursPerShift || 7.5);
   let totalAvailable = 0;
   const current = new Date(dateFrom);
   const end = new Date(dateTo);
@@ -70,7 +83,7 @@ export async function calculateAvailability(machineId, dateFrom, dateTo) {
       const { totalHours } = await shiftService.getAvailableHours(machineId, current.toISOString().split('T')[0]);
       totalAvailable += totalHours;
     } catch {
-      totalAvailable += 16;
+      totalAvailable += availFallbackHours;
     }
     current.setDate(current.getDate() + 1);
   }

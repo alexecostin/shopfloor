@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { getTenantConfig } from './app-config.service.js';
 
 const PRIMARY = '#2563eb';
 const TEXT = '#1e293b';
@@ -101,6 +102,10 @@ export async function generateProductionReport(reports, date) {
 // ─── OEE Report ──────────────────────────────────────────────────────────────
 
 export async function generateOEEReport(machines, dateFrom, dateTo) {
+  const pdfConfig = await getTenantConfig(null).catch(() => ({}));
+  const oeeGood = (pdfConfig.oeeGoodThreshold || 85) / 100;
+  const oeeAlert = (pdfConfig.oeeAlertThreshold || 60) / 100;
+
   return new Promise((resolve) => {
     const doc = createDoc();
     const chunks = [];
@@ -141,7 +146,7 @@ export async function generateOEEReport(machines, dateFrom, dateTo) {
         const oee = m.oee || 0;
         const barH = Math.round(oee * maxH);
         const x = startX + i * (barW + 5);
-        const color = oee >= 0.85 ? '#22c55e' : oee >= 0.6 ? '#f59e0b' : '#ef4444';
+        const color = oee >= oeeGood ? '#22c55e' : oee >= oeeAlert ? '#f59e0b' : '#ef4444';
         doc.rect(x, baseY - barH, barW, barH).fillColor(color).fill();
         doc.fontSize(7).fillColor(TEXT).text(`${Math.round(oee * 100)}%`, x, baseY - barH - 12, { width: barW, align: 'center' });
         doc.fontSize(6).fillColor(MUTED).text(m.machine_code || '', x, baseY + 4, { width: barW, align: 'center' });
