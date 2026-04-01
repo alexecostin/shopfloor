@@ -94,9 +94,81 @@ function TraceNode({ node, depth = 0 }) {
 
 // ─── Loturi Tab ─────────────────────────────────────────────────────────
 
+function LotDetailModal({ lotId, onClose }) {
+  const { data: lotDetail, isLoading } = useQuery({
+    queryKey: ['lot-detail', lotId],
+    queryFn: () => api.get(`/traceability/lots/${lotId}`).then(r => r.data),
+    enabled: !!lotId,
+  })
+
+  const lot = lotDetail?.lot || lotDetail || {}
+  const usage = lotDetail?.usage || lotDetail?.production_lot_usage || []
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-slate-800">Detalii Lot</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg font-bold">X</button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-slate-400 text-sm">Se incarca...</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-slate-400">Nr. Lot:</span> <strong className="font-mono">{lot.lot_number}</strong></div>
+              <div><span className="text-slate-400">Status:</span> <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[lot.status] || ''}`}>{lot.status}</span></div>
+              <div><span className="text-slate-400">Cantitate:</span> {lot.quantity} {lot.unit}</div>
+              <div><span className="text-slate-400">Ramas:</span> {lot.remaining_quantity} {lot.unit}</div>
+              <div><span className="text-slate-400">Articol ID:</span> <span className="text-xs font-mono text-slate-500">{lot.item_id || '-'}</span></div>
+              <div><span className="text-slate-400">Furnizor ID:</span> <span className="text-xs font-mono text-slate-500">{lot.supplier_id || '-'}</span></div>
+              <div><span className="text-slate-400">Data receptie:</span> {lot.received_date ? new Date(lot.received_date).toLocaleDateString('ro-RO') : '-'}</div>
+              <div><span className="text-slate-400">Data expirare:</span> {lot.expiry_date ? new Date(lot.expiry_date).toLocaleDateString('ro-RO') : '-'}</div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-2">Utilizare lot in productie</h4>
+              {usage.length === 0 ? (
+                <p className="text-sm text-slate-400">Acest lot nu a fost inca folosit in productie.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-slate-500">
+                        <th className="pb-2 pr-4">Raport ID</th>
+                        <th className="pb-2 pr-4">Cantitate folosita</th>
+                        <th className="pb-2 pr-4">Data</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usage.map((u, i) => (
+                        <tr key={u.id || i} className="border-b border-slate-100">
+                          <td className="py-2 pr-4 text-xs font-mono text-slate-500">{(u.production_report_id || u.report_id || '-').substring(0, 12)}</td>
+                          <td className="py-2 pr-4">{u.quantity_used} {lot.unit || ''}</td>
+                          <td className="py-2 pr-4 text-xs text-slate-400">{u.created_at ? new Date(u.created_at).toLocaleDateString('ro-RO') : u.used_at ? new Date(u.used_at).toLocaleDateString('ro-RO') : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end mt-4">
+          <button onClick={onClose} className="btn-secondary">Inchide</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LoturiTab() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
+  const [selectedLotId, setSelectedLotId] = useState(null)
   const [filterStatus, setFilterStatus] = useState('')
   const [page, setPage] = useState(1)
 
@@ -157,7 +229,7 @@ function LoturiTab() {
             </thead>
             <tbody>
               {lots.map(l => (
-                <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
+                <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedLotId(l.id)}>
                   <td className="py-2 pr-4 font-mono font-medium">{l.lot_number}</td>
                   <td className="py-2 pr-4 text-xs text-slate-400">{l.item_id?.substring(0, 8) || '-'}</td>
                   <td className="py-2 pr-4 text-xs text-slate-400">{l.supplier_id?.substring(0, 8) || '-'}</td>
@@ -190,6 +262,7 @@ function LoturiTab() {
       )}
 
       {showModal && <CreateLotModal onClose={() => setShowModal(false)} onSubmit={d => createMut.mutate(d)} loading={createMut.isPending} />}
+      {selectedLotId && <LotDetailModal lotId={selectedLotId} onClose={() => setSelectedLotId(null)} />}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Trash2, ChevronRight, Cpu, Layers, Wrench, Clock, Euro } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronRight, Cpu, Layers, Wrench, Clock, Euro, UserPlus, UserMinus } from 'lucide-react'
 import { useLookup } from '../hooks/useLookup'
 
 function LookupSelect({ lookupType, value, onChange, placeholder }) {
@@ -151,6 +151,9 @@ function MachineCard({ machine, onClose, isAdmin }) {
   const qc = useQueryClient()
   const [addCap, setAddCap] = useState(false)
   const [planTab, setPlanTab] = useState(false)
+  const [opsTab, setOpsTab] = useState(false)
+  const [showAssignOp, setShowAssignOp] = useState(false)
+  const [assignUserId, setAssignUserId] = useState('')
 
   const { data: detail } = useQuery({
     queryKey: ['machine-detail', machine.id],
@@ -161,6 +164,28 @@ function MachineCard({ machine, onClose, isAdmin }) {
     queryKey: ['machine-planning', machine.id],
     queryFn: () => api.get(`/machines/${machine.id}/planning`).then(r => r.data),
     enabled: planTab,
+  })
+
+  const { data: usersData } = useQuery({
+    queryKey: ['users-for-assign'],
+    queryFn: () => api.get('/auth/users').then(r => r.data?.data || r.data || []),
+    enabled: opsTab && isAdmin,
+  })
+
+  const assignOperator = useMutation({
+    mutationFn: (userId) => api.post(`/machines/${machine.id}/operators`, { userId }),
+    onSuccess: () => { qc.invalidateQueries(['machine-detail', machine.id]); toast.success('Operator alocat.'); setShowAssignOp(false); setAssignUserId('') },
+    onError: (e) => {
+      const msg = e.response?.data?.message || ''
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Operatorul este deja alocat.')
+      else toast.error(msg || 'Eroare la alocare operator.')
+    },
+  })
+
+  const removeOperator = useMutation({
+    mutationFn: (userId) => api.delete(`/machines/${machine.id}/operators/${userId}`),
+    onSuccess: () => { qc.invalidateQueries(['machine-detail', machine.id]); toast.success('Operator dezalocat.') },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la dezalocare operator.'),
   })
 
   const deleteCap = useMutation({
@@ -204,21 +229,24 @@ function MachineCard({ machine, onClose, isAdmin }) {
 
         {/* Tabs */}
         <div className="flex border-b border-slate-100">
-          {[['cap', 'Operatii posibile'], ['ops', 'Operatori'], ['plan', 'Planificare']].map(([t, l]) => (
-            <button key={t}
-              onClick={() => { if (t === 'plan') setPlanTab(true) }}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
-                ${(t === 'cap' && !planTab) || (t === 'plan' && planTab)
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-            >
-              {l}
-            </button>
-          ))}
+          {[['cap', 'Operatii posibile'], ['ops', 'Operatori'], ['plan', 'Planificare']].map(([t, l]) => {
+            const active = (t === 'cap' && !planTab && !opsTab) || (t === 'ops' && opsTab) || (t === 'plan' && planTab)
+            return (
+              <button key={t}
+                onClick={() => { setPlanTab(t === 'plan'); setOpsTab(t === 'ops') }}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                  ${active
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+              >
+                {l}
+              </button>
+            )
+          })}
         </div>
 
         <div className="p-5">
-          {!planTab && (
+          {!planTab && !opsTab && (
             <>
               {/* Capabilities */}
               <div className="flex items-center justify-between mb-3">
@@ -269,15 +297,67 @@ function MachineCard({ machine, onClose, isAdmin }) {
                   )
                 })}
               </div>
+            </>
+          )}
 
-              {/* Operators */}
-              {detail?.operators?.length > 0 && (
-                <div className="mt-5">
-                  <h4 className="text-sm font-medium text-slate-700 mb-2">Operatori alocati</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {detail.operators.map(op => (
-                      <span key={op.id} className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full">{op.full_name}</span>
-                    ))}
+          {opsTab && (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-slate-700">Operatori alocati</h4>
+                {isAdmin && (
+                  <button onClick={() => setShowAssignOp(true)} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+                    <UserPlus size={12} /> Aloca operator
+                  </button>
+                )}
+              </div>
+
+              {detail?.operators?.length === 0 && (
+                <p className="text-slate-400 text-sm text-center py-4">
+                  Niciun operator alocat. Adauga operatorii calificati pe acest utilaj.
+                </p>
+              )}
+
+              <div className="space-y-2">
+                {detail?.operators?.map(op => (
+                  <div key={op.id} className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-3">
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 text-sm">{op.full_name}</span>
+                      {op.role && <span className="text-xs text-slate-400 ml-2">{op.role}</span>}
+                      {op.email && <span className="text-xs text-slate-400 ml-2">{op.email}</span>}
+                    </div>
+                    {isAdmin && (
+                      <button
+                        onClick={() => { if (confirm(`Sigur doriti sa dezalocati operatorul "${op.full_name}"?`)) removeOperator.mutate(op.id) }}
+                        className="text-slate-300 hover:text-red-400 flex items-center gap-1 text-xs"
+                        title="Dezaloca operator"
+                      >
+                        <UserMinus size={13} /> Dezaloca
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {showAssignOp && (
+                <div className="mt-3 bg-blue-50 rounded-lg p-3 border border-blue-100">
+                  <h5 className="text-xs font-medium text-blue-700 mb-2">Aloca operator nou</h5>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <select className="input text-sm w-full" value={assignUserId} onChange={e => setAssignUserId(e.target.value)}>
+                        <option value="">Selecteaza operator...</option>
+                        {(usersData || []).filter(u => !detail?.operators?.find(o => o.id === u.id)).map(u => (
+                          <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => assignOperator.mutate(assignUserId)}
+                      disabled={!assignUserId || assignOperator.isPending}
+                      className="btn-primary text-xs"
+                    >
+                      {assignOperator.isPending ? 'Se aloca...' : 'Aloca'}
+                    </button>
+                    <button onClick={() => setShowAssignOp(false)} className="btn-secondary text-xs">Anuleaza</button>
                   </div>
                 </div>
               )}

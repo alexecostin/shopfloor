@@ -667,6 +667,7 @@ function OperationDetailDrawer({ operation, machines, onSaved, onClose, onDelete
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function NewOperationModal({ productId, nextSequence, onClose, onCreated }) {
+  const qc = useQueryClient()
   const [form, setForm] = useState({
     operation_name: '',
     operation_type: '',
@@ -687,6 +688,16 @@ function NewOperationModal({ productId, nextSequence, onClose, onCreated }) {
   const { data: templates } = useQuery({
     queryKey: ['operation-templates'],
     queryFn: () => api.get('/bom/operation-templates').then(r => r.data),
+  })
+
+  const deleteTemplateMut = useMutation({
+    mutationFn: (tplId) => api.delete(`/bom/operation-templates/${tplId}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operation-templates'] }); toast.success('Template sters.') },
+    onError: (err) => {
+      const msg = err.response?.data?.message || ''
+      if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.')
+      else toast.error(msg || 'Eroare la stergere template.')
+    },
   })
 
   const handleTemplateSelect = (e) => {
@@ -728,14 +739,30 @@ function NewOperationModal({ productId, nextSequence, onClose, onCreated }) {
               <label className="text-xs text-slate-500 mb-1 block flex items-center gap-1">
                 <LayoutTemplate size={12} /> Selecteaza template
               </label>
-              <select className="input text-sm" defaultValue="" onChange={handleTemplateSelect}>
-                <option value="">-- Fara template (manual) --</option>
+              <div className="flex gap-2 items-center">
+                <select className="input text-sm flex-1" defaultValue="" onChange={handleTemplateSelect}>
+                  <option value="">-- Fara template (manual) --</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({OP_TYPE_LABELS[t.operation_type] || t.operation_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
                 {templates.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({OP_TYPE_LABELS[t.operation_type] || t.operation_type})
-                  </option>
+                  <span key={t.id} className="inline-flex items-center gap-1 text-xs bg-slate-100 px-2 py-0.5 rounded">
+                    {t.name}
+                    <button
+                      onClick={() => { if (confirm(`Sigur doriti sa stergeti template-ul "${t.name}"?`)) deleteTemplateMut.mutate(t.id) }}
+                      className="text-slate-400 hover:text-red-500"
+                      title="Sterge template"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </span>
                 ))}
-              </select>
+              </div>
             </div>
           )}
           <input className="input" placeholder="Nume operatie *" value={form.operation_name} onChange={f('operation_name')} />
@@ -890,6 +917,30 @@ function MaterialsPanel({ components }) {
   )
 }
 
+// --- Delete material button helper ---
+function DeleteMaterialButton({ materialId, onDeleted }) {
+  const qc = useQueryClient()
+  const deleteMut = useMutation({
+    mutationFn: () => api.delete(`/bom/materials/${materialId}`),
+    onSuccess: () => { toast.success('Material sters.'); qc.invalidateQueries({ queryKey: ['mbom-order'] }); onDeleted?.() },
+    onError: (err) => {
+      const msg = err.response?.data?.message || ''
+      if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.')
+      else toast.error(msg || 'Eroare la stergere material.')
+    },
+  })
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); if (confirm('Sigur doriti sa stergeti acest material?')) deleteMut.mutate() }}
+      disabled={deleteMut.isPending}
+      className="text-red-400 hover:text-red-600 shrink-0"
+      title="Sterge material"
+    >
+      <Trash2 size={12} />
+    </button>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RIGHT PANEL: MACHINES
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -963,11 +1014,22 @@ function MachinesPanel({ machineLoad }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function ComponentSection({ component, operations, orderQty, onClickOp, onAddOp, refetch }) {
+  const qc = useQueryClient()
   const [expanded, setExpanded] = useState(true)
   const compName = component.component_name || component.component_reference || 'Componenta'
   const isFabricated = component.component_type !== 'purchased'
 
   const totalTime = operations.reduce((s, op) => s + (Number(op.cycle_time_seconds) || 0), 0)
+
+  const deleteMaterialMut = useMutation({
+    mutationFn: (materialId) => api.delete(`/bom/materials/${materialId}`),
+    onSuccess: () => { toast.success('Material sters.'); qc.invalidateQueries({ queryKey: ['mbom-order'] }); refetch?.() },
+    onError: (err) => {
+      const msg = err.response?.data?.message || ''
+      if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.')
+      else toast.error(msg || 'Eroare la stergere material.')
+    },
+  })
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -994,6 +1056,15 @@ function ComponentSection({ component, operations, orderQty, onClickOp, onAddOp,
           <span>Total: {(component.qty_per_parent || 1) * (orderQty || 1)}</span>
           <span>{operations.length} op</span>
           <span>{formatTime(totalTime)}</span>
+          {component.material_id && (
+            <button
+              onClick={(e) => { e.stopPropagation(); if (confirm('Sigur doriti sa stergeti acest material din BOM?')) deleteMaterialMut.mutate(component.material_id) }}
+              className="text-red-400 hover:text-red-600 ml-1"
+              title="Sterge material din BOM"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
       </div>
 

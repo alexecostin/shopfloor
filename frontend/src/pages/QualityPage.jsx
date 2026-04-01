@@ -235,6 +235,7 @@ function CreatePlanModal({ onClose, onSubmit, loading }) {
 function MasurariTab() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [faiMode, setFaiMode] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [page, setPage] = useState(1)
 
@@ -278,9 +279,14 @@ function MasurariTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-slate-500">Inregistrare si vizualizare masurari</p>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-1">
-          <Plus size={14} /> Masurare noua
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => { setShowForm(true); setFaiMode(true) }} className="btn-secondary flex items-center gap-1 text-amber-700 border-amber-200 hover:bg-amber-50">
+            <ShieldCheck size={14} /> Prima piesa (FAI)
+          </button>
+          <button onClick={() => { setShowForm(true); setFaiMode(false) }} className="btn-primary flex items-center gap-1">
+            <Plus size={14} /> Masurare noua
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -290,8 +296,9 @@ function MasurariTab() {
           setSelectedPlanId={setSelectedPlanId}
           selectedChars={selectedChars}
           onSubmit={d => createMut.mutate(d)}
-          onClose={() => setShowForm(false)}
+          onClose={() => { setShowForm(false); setFaiMode(false) }}
           loading={createMut.isPending}
+          initialType={faiMode ? 'fai' : 'inline'}
         />
       )}
 
@@ -358,9 +365,9 @@ function MasurariTab() {
   )
 }
 
-function MeasurementForm({ plans, selectedPlanId, setSelectedPlanId, selectedChars, onSubmit, onClose, loading }) {
+function MeasurementForm({ plans, selectedPlanId, setSelectedPlanId, selectedChars, onSubmit, onClose, loading, initialType }) {
   const [measValues, setMeasValues] = useState([])
-  const [measurementType, setMeasurementType] = useState('inline')
+  const [measurementType, setMeasurementType] = useState(initialType || 'inline')
   const [notes, setNotes] = useState('')
 
   function handlePlanChange(planId) {

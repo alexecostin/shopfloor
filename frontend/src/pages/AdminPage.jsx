@@ -208,11 +208,22 @@ function OrgTab() {
 }
 
 function RolesTab() {
+  const qc = useQueryClient();
   const { data: roles = [], isLoading } = useQuery({ queryKey: ['admin-roles'], queryFn: () => api('/roles') });
   const { data: permsByModule = [] } = useQuery({ queryKey: ['admin-perms'], queryFn: () => api('/permissions/by-module') });
   const [selected, setSelected] = useState(null);
 
   const { data: roleDetail } = useQuery({ queryKey: ['admin-role', selected], queryFn: () => selected ? api(`/roles/${selected}`) : null, enabled: !!selected });
+
+  const deleteRoleMut = useMutation({
+    mutationFn: (roleId) => httpClient.delete(`/admin/roles/${roleId}`).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries(['admin-roles']); setSelected(null); toast.success('Rol sters.'); },
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('foreign key') || msg.includes('associated')) toast.error('Nu se poate sterge — exista utilizatori asociati.');
+      else toast.error(msg || 'Eroare la stergere rol.');
+    },
+  });
 
   if (isLoading) return <div className="text-slate-400">Se incarca...</div>;
 
@@ -222,11 +233,21 @@ function RolesTab() {
         <h3 className="font-semibold text-slate-800 mb-3 text-sm">Roluri</h3>
         <div className="space-y-1">
           {roles.map(r => (
-            <button key={r.id} onClick={() => setSelected(r.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${selected === r.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
-              {r.name}
-              {r.is_predefined && <span className="ml-1 text-xs text-slate-400">(sistem)</span>}
-            </button>
+            <div key={r.id} className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${selected === r.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <button onClick={() => setSelected(r.id)} className="flex-1 text-left">
+                {r.name}
+                {r.is_predefined && <span className="ml-1 text-xs text-slate-400">(sistem)</span>}
+              </button>
+              {!r.is_predefined && (
+                <button
+                  onClick={() => { if (confirm(`Sigur doriti sa stergeti rolul "${r.name}"? Aceasta actiune este ireversibila.`)) deleteRoleMut.mutate(r.id) }}
+                  className="text-slate-300 hover:text-red-500 shrink-0"
+                  title="Sterge rol"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </div>

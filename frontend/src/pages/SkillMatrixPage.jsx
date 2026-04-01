@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Search, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Search, Calendar, ChevronLeft, ChevronRight, Trash2, XCircle } from 'lucide-react'
 import { useLookup, getLookupLabel } from '../hooks/useLookup'
 
 const STATUS_COLORS = { pending: 'bg-slate-100 text-slate-600', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' }
@@ -235,6 +235,33 @@ function EditSkillModal({ skill, levels, onClose }) {
   )
 }
 
+function RejectLeaveModal({ leaveId, onClose, onReject, loading }) {
+  const [reason, setReason] = useState('')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <h3 className="font-semibold text-slate-800 mb-4">Respinge cerere concediu</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Motiv respingere (optional)</label>
+            <textarea className="input w-full" rows={3} placeholder="Descrieti motivul respingerii..." value={reason} onChange={e => setReason(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5 justify-end">
+          <button onClick={onClose} className="btn-secondary">Anuleaza</button>
+          <button
+            onClick={() => onReject(leaveId, reason)}
+            disabled={loading}
+            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700"
+          >
+            {loading ? 'Se respinge...' : 'Respinge'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SkillMatrixPage() {
   const { user } = useAuth()
   const [tab, setTab] = useState('matrix')
@@ -243,6 +270,7 @@ export default function SkillMatrixPage() {
   const [showLevelModal, setShowLevelModal] = useState(false)
   const [editLevel, setEditLevel] = useState(null)
   const [editSkill, setEditSkill] = useState(null)
+  const [rejectLeaveId, setRejectLeaveId] = useState(null)
   const [availDate, setAvailDate] = useState(new Date().toISOString().split('T')[0])
   const [availMachineType, setAvailMachineType] = useState('')
   const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1)
@@ -280,6 +308,16 @@ export default function SkillMatrixPage() {
       if (data?.data?.warning) toast(data.data.warning, { icon: '⚠️' })
     },
     onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+  })
+
+  const rejectMut = useMutation({
+    mutationFn: ({ id, reason }) => api.put(`/hr/leave/${id}/reject`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries(['leave'])
+      toast.success('Cerere de concediu respinsa.')
+      setRejectLeaveId(null)
+    },
+    onError: e => toast.error(e.response?.data?.message || 'Eroare la respingere.'),
   })
 
   const levelList = levels?.data || levels || []
@@ -330,13 +368,24 @@ export default function SkillMatrixPage() {
                         return (
                           <td key={m.id} className="px-3 py-3 text-center">
                             {lvl ? (
-                              <span
-                                className="text-xs px-2 py-1 rounded-full cursor-pointer hover:opacity-80"
-                                style={{ backgroundColor: lvl.color + '30', color: lvl.color }}
-                                onClick={() => isManager && setEditSkill(sk)}
-                                title={isManager ? 'Click pentru editare' : ''}
-                              >
-                                {lvl.name}
+                              <span className="inline-flex items-center gap-1">
+                                <span
+                                  className="text-xs px-2 py-1 rounded-full cursor-pointer hover:opacity-80"
+                                  style={{ backgroundColor: lvl.color + '30', color: lvl.color }}
+                                  onClick={() => isManager && setEditSkill(sk)}
+                                  title={isManager ? 'Click pentru editare' : ''}
+                                >
+                                  {lvl.name}
+                                </span>
+                                {isManager && (
+                                  <button
+                                    onClick={() => { if (confirm('Sigur doriti sa stergeti aceasta competenta?')) deleteMut.mutate(sk.id) }}
+                                    className="text-slate-300 hover:text-red-400"
+                                    title="Sterge competenta"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                )}
                               </span>
                             ) : <span className="text-slate-200">—</span>}
                           </td>
@@ -383,7 +432,7 @@ export default function SkillMatrixPage() {
                         <td className="px-4 py-3 flex gap-2 justify-end">
                           {l.status === 'pending' && (<>
                             <button onClick={() => approveMut.mutate({ id: l.id, action: 'approve' })} className="text-xs btn-primary py-1">Aproba</button>
-                            <button onClick={() => approveMut.mutate({ id: l.id, action: 'reject' })} className="text-xs btn-secondary py-1">Respinge</button>
+                            <button onClick={() => setRejectLeaveId(l.id)} className="text-xs btn-secondary py-1 flex items-center gap-1"><XCircle size={11} /> Respinge</button>
                           </>)}
                         </td>
                       )}
@@ -560,6 +609,7 @@ export default function SkillMatrixPage() {
       {showLeave && <LeaveModal onClose={() => setShowLeave(false)} />}
       {showLevelModal && <SkillLevelModal editLevel={editLevel} onClose={() => { setShowLevelModal(false); setEditLevel(null) }} />}
       {editSkill && <EditSkillModal skill={editSkill} levels={levels} onClose={() => setEditSkill(null)} />}
+      {rejectLeaveId && <RejectLeaveModal leaveId={rejectLeaveId} onClose={() => setRejectLeaveId(null)} onReject={(id, reason) => rejectMut.mutate({ id, reason })} loading={rejectMut.isPending} />}
     </div>
   )
 }
