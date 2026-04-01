@@ -2,7 +2,8 @@ import db from '../../config/db.js';
 import * as orderStatusSvc from '../../services/order-status.service.js';
 
 async function nextWONumber() {
-  const [{ nextval }] = await db.raw("SELECT nextval('production.work_order_seq')");
+  const result = await db.raw("SELECT nextval('production.work_order_seq')");
+  const nextval = result.rows?.[0]?.nextval || result[0]?.nextval || Date.now();
   return `CL-${String(nextval).padStart(5, '0')}`;
 }
 
