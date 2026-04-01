@@ -1088,6 +1088,14 @@ function ComponentSection({ component, operations, orderQty, onClickOp, onAddOp,
 
   const totalTime = operations.reduce((s, op) => s + (Number(op.cycle_time_seconds) || 0), 0)
 
+  // Documents specific to this component/product
+  const productId = component.component_product_id
+  const { data: componentDocs = [] } = useQuery({
+    queryKey: ['component-docs', productId],
+    queryFn: () => api.get(`/documents/for/product/${productId}`).then(r => r.data),
+    enabled: !!productId,
+  })
+
   const deleteMaterialMut = useMutation({
     mutationFn: (materialId) => api.delete(`/bom/materials/${materialId}`),
     onSuccess: () => { toast.success('Material sters.'); qc.invalidateQueries({ queryKey: ['mbom-order'] }); refetch?.() },
@@ -1134,6 +1142,26 @@ function ComponentSection({ component, operations, orderQty, onClickOp, onAddOp,
           )}
         </div>
       </div>
+
+      {/* Documents per component */}
+      {expanded && componentDocs.length > 0 && (
+        <div className="px-4 py-2 border-t border-purple-100 bg-purple-50/50 flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-medium text-purple-600 uppercase tracking-wide">Documente piesa:</span>
+          {componentDocs.map(doc => {
+            const rev = doc.revisions?.find(r => r.id === doc.current_revision_id) || doc.revisions?.[0]
+            return (
+              <a key={doc.id} href={rev?.file_path ? `/uploads/${rev.file_path}` : '#'} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded border border-purple-200 text-xs text-purple-700 hover:bg-purple-50 transition-colors"
+                title={`${doc.title} — Rev. ${rev?.revision_code || '?'}`}
+              >
+                <FileText size={11} />
+                <span className="max-w-[120px] truncate">{doc.title}</span>
+                <span className="text-[9px] text-purple-400">Rev.{rev?.revision_code || '?'}</span>
+              </a>
+            )
+          })}
+        </div>
+      )}
 
       {/* Operations flow */}
       {expanded && isFabricated && (
