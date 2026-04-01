@@ -107,13 +107,13 @@ export async function calculateOEETrend(machineId, weeks = 12) {
     // Performance: actual output vs theoretical max
     const [{ goodSum }] = await db('production.reports')
       .where('machine_id', machineId)
-      .where('created_at', '>=', from)
-      .where('created_at', '<=', to)
+      .where('reported_at', '>=', from)
+      .where('reported_at', '<=', to)
       .sum('good_pieces as goodSum');
     const [{ scrapSum }] = await db('production.reports')
       .where('machine_id', machineId)
-      .where('created_at', '>=', from)
-      .where('created_at', '<=', to)
+      .where('reported_at', '>=', from)
+      .where('reported_at', '<=', to)
       .sum('scrap_pieces as scrapSum');
 
     const good = Number(goodSum) || 0;

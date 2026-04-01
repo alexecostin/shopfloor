@@ -163,7 +163,7 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
           orderNumber: order.orderNumber,
           deadline: order.deadline,
           estimatedCompletion: lastAlloc.planDate,
-          isLate: order.deadline && lastAlloc.planDate > order.deadline.split('T')[0],
+          isLate: order.deadline && lastAlloc.planDate > String(order.deadline).split('T')[0],
           daysLate: order.deadline ? Math.ceil((new Date(lastAlloc.planDate) - new Date(order.deadline)) / 86400000) : 0,
         };
       }
@@ -209,6 +209,8 @@ export async function applySmartPlan(planResult, periodStart, periodEnd, userId)
   const [masterPlan] = await db('planning.master_plans').insert({
     name: `Smart Plan ${new Date().toISOString().split('T')[0]}`,
     plan_type: 'weekly',
+    year: new Date(periodStart).getFullYear(),
+    week_number: Math.ceil((new Date(periodStart) - new Date(new Date(periodStart).getFullYear(), 0, 1)) / (7 * 86400000)),
     start_date: periodStart,
     end_date: periodEnd,
     notes: `Plan generat automat — ${summary.totalPieces} piese, ${summary.totalAllocations} alocari, ${summary.totalHours}h total`,

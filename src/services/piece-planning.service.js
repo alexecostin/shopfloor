@@ -90,7 +90,7 @@ export async function aggregatePiecesFromOrders() {
     const pa = { urgent: 4, high: 3, normal: 2, low: 1 }[a.highestPriority] || 0;
     const pb = { urgent: 4, high: 3, normal: 2, low: 1 }[b.highestPriority] || 0;
     if (pb !== pa) return pb - pa;
-    if (a.earliestDeadline && b.earliestDeadline) return a.earliestDeadline.localeCompare(b.earliestDeadline);
+    if (a.earliestDeadline && b.earliestDeadline) return String(a.earliestDeadline).localeCompare(String(b.earliestDeadline));
     return b.totalQuantity - a.totalQuantity;
   });
 }

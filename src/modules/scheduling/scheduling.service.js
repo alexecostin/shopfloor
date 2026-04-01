@@ -12,7 +12,10 @@ export const createConfig = async (data, userId) => {
     const weights = data.priorities.reduce((s, p) => s + (p.weight || 0), 0);
     if (Math.abs(weights - 100) > 0.01) throw Object.assign(new Error('Suma ponderilor trebuie sa fie 100.'), { statusCode: 400 });
   }
-  const [r] = await db('planning.scheduling_configs').insert({ ...data, created_by: userId }).returning('*');
+  const row = { ...data, created_by: userId };
+  if (row.priorities && typeof row.priorities !== 'string') row.priorities = JSON.stringify(row.priorities);
+  if (row.constraints && typeof row.constraints !== 'string') row.constraints = JSON.stringify(row.constraints);
+  const [r] = await db('planning.scheduling_configs').insert(row).returning('*');
   return r;
 };
 
