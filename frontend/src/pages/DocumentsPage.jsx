@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback } from 'react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
+import SearchableSelect from '../components/SearchableSelect'
 import {
   FileText, Plus, X, Search, Upload, Link2, Eye,
   File, FileImage, FileSpreadsheet, FileCheck,
@@ -264,8 +265,24 @@ function LinkEntityModal({ documentId, onClose, onSuccess }) {
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">ID Entitate *</label>
-            <input className="input" value={entityId} onChange={e => setEntityId(e.target.value)} placeholder="UUID-ul entitatii" />
+            <label className="text-xs font-medium text-slate-600 mb-1 block">
+              {entityType === 'machine' ? 'Selecteaza utilajul' :
+               entityType === 'product' ? 'Selecteaza produsul' :
+               entityType === 'work_order' ? 'Selecteaza comanda' :
+               entityType === 'tool' ? 'Selecteaza scula' :
+               'Selecteaza entitatea'} *
+            </label>
+            <SearchableSelect
+              endpoint={entityType === 'machine' ? '/machines' : entityType === 'product' ? '/bom/products' : entityType === 'work_order' ? '/work-orders' : entityType === 'tool' ? '/tools' : '/machines'}
+              labelField={entityType === 'work_order' ? 'work_order_number' : entityType === 'product' ? 'reference' : 'name'}
+              secondaryField={entityType === 'work_order' ? 'product_name' : entityType === 'product' ? 'name' : 'code'}
+              valueField="id"
+              placeholder={`Cauta ${entityType === 'machine' ? 'utilaj' : entityType === 'product' ? 'produs' : entityType === 'work_order' ? 'comanda' : 'entitate'}...`}
+              value={entityId || null}
+              onChange={(id) => setEntityId(id || '')}
+              allowCreate={false}
+            />
+            <p className="text-[10px] text-slate-400 mt-0.5">Documentul va fi legat de aceasta entitate</p>
           </div>
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Tip legatura</label>
