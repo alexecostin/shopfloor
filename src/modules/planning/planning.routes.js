@@ -3,6 +3,7 @@ import { authenticate, authorize } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import * as v from './planning.validation.js';
 import * as c from './planning.controller.js';
+import * as smartScheduler from '../../services/smart-scheduler.service.js';
 
 const router = Router();
 const mgr = authorize('admin', 'production_manager');
@@ -26,6 +27,10 @@ router.delete('/allocations/:id', mgr, c.deleteAllocation);
 router.get('/allocation-context/:machineId', c.getAllocationContext);
 router.get('/machine-load/:machineId', c.getMachineLoad);
 
+// Pieces (aggregated from all orders)
+router.get('/pieces', c.getPieces);
+router.get('/pieces/machine/:machineId', c.getMachinePieces);
+
 // Capacity
 router.get('/capacity', c.getCapacity);
 
@@ -43,5 +48,28 @@ router.post('/ctp', c.postCTP);
 // Replan approval
 router.put('/replan/:id/approve', mgr, c.approveReplan);
 router.put('/replan/:id/reject', mgr, c.rejectReplan);
+
+// Smart Scheduling
+router.post('/smart-schedule', mgr, async (req, res, next) => {
+  try {
+    const { configId, periodStart, periodEnd } = req.body;
+    if (!periodStart || !periodEnd) {
+      return res.status(400).json({ message: 'periodStart si periodEnd sunt obligatorii.' });
+    }
+    const result = await smartScheduler.generateSmartPlan(configId || null, periodStart, periodEnd, req.user.userId);
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.post('/smart-schedule/apply', mgr, async (req, res, next) => {
+  try {
+    const { planResult, periodStart, periodEnd } = req.body;
+    if (!planResult || !planResult.allocations) {
+      return res.status(400).json({ message: 'planResult cu allocations este obligatoriu.' });
+    }
+    const result = await smartScheduler.applySmartPlan(planResult, periodStart, periodEnd, req.user.userId);
+    res.status(201).json(result);
+  } catch (e) { next(e); }
+});
 
 export default router;

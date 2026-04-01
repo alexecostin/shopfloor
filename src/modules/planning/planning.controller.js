@@ -1,6 +1,7 @@
 import * as svc from './planning.service.js';
 import * as replanSvc from '../../services/replan.service.js';
 import * as ctpSvc from '../../services/ctp.service.js';
+import * as piecePlanning from '../../services/piece-planning.service.js';
 
 export const getMasterPlans = async (req, res, next) => {
   try { res.json(await svc.listMasterPlans(req.query)); } catch (e) { next(e); }
@@ -109,6 +110,14 @@ export const approveReplan = async (req, res, next) => {
 
 export const rejectReplan = async (req, res, next) => {
   try { res.json(await replanSvc.rejectReplan(req.params.id, req.user.userId, req.body.reason)); } catch (e) { next(e); }
+};
+
+export const getPieces = async (req, res, next) => {
+  try { res.json(await piecePlanning.aggregatePiecesFromOrders()); } catch (e) { next(e); }
+};
+
+export const getMachinePieces = async (req, res, next) => {
+  try { res.json(await piecePlanning.getSetupOptimization(req.params.machineId)); } catch (e) { next(e); }
 };
 
 export const postCTP = async (req, res, next) => {

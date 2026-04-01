@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Calendar, ChevronRight, Trash2, Pencil, Search, BarChart3, PlayCircle, XCircle, ArrowLeft, ArrowRight, Check, AlertTriangle, Info, Loader2, Calculator } from 'lucide-react'
+import { Plus, Calendar, ChevronRight, ChevronDown, Trash2, Pencil, Search, BarChart3, PlayCircle, XCircle, ArrowLeft, ArrowRight, Check, AlertTriangle, Info, Loader2, Calculator, Package, Layers } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 
 const SHIFTS = ['Tura I', 'Tura II', 'Tura III']
@@ -330,8 +330,54 @@ function AllocationModal({ plan, machines, onClose }) {
                   <p className="text-xs mt-1">Verificati ca exista comenzi active cu produse care au operatii alocabile pe acest utilaj.</p>
                 </div>
               )}
+              {/* Aggregated operations view */}
+              {context && context.aggregatedOperations?.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers size={14} className="text-blue-500" />
+                    <span className="text-xs font-semibold text-slate-600">Vizualizare agregata (piese din toate comenzile)</span>
+                  </div>
+                  <div className="overflow-x-auto -mx-2">
+                    <table className="w-full text-xs">
+                      <thead className="bg-blue-50 sticky top-0">
+                        <tr>
+                          <th className="text-left px-2 py-2 font-medium text-blue-700">Produs</th>
+                          <th className="text-left px-2 py-2 font-medium text-blue-700">Operatie</th>
+                          <th className="text-center px-2 py-2 font-medium text-blue-700">Comenzi</th>
+                          <th className="text-right px-2 py-2 font-medium text-blue-700">Total AGREG</th>
+                          <th className="text-right px-2 py-2 font-medium text-blue-700">Alocat</th>
+                          <th className="text-right px-2 py-2 font-medium text-blue-700">Ramas</th>
+                          <th className="text-right px-2 py-2 font-medium text-blue-700">Timp/pcs</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {context.aggregatedOperations.map((ao, i) => (
+                          <tr
+                            key={`agg-${ao.operation?.id}-${i}`}
+                            onClick={() => { setSelectedOp({ ...ao, order: ao.orders?.[0] ? { id: null, orderNumber: ao.orders.map(o => o.orderNumber).join(', '), clientName: ao.orders.map(o => o.clientName).filter(Boolean).join(', ') } : null, aggregatedTotalQty: ao.totalQty, aggregatedRemaining: ao.remaining, orderCount: ao.orderCount }); setAllocQty(String(ao.remaining)); setStep(3) }}
+                            className={`cursor-pointer transition-colors hover:bg-blue-50`}
+                          >
+                            <td className="px-2 py-2 text-slate-700 font-medium">{ao.productReference}</td>
+                            <td className="px-2 py-2 text-slate-600">{ao.operationName || ao.operationType || '-'}</td>
+                            <td className="px-2 py-2 text-center text-blue-600 font-medium">{ao.orderCount}</td>
+                            <td className="px-2 py-2 text-right font-bold text-blue-700">{ao.totalQty?.toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right text-slate-500">{ao.alreadyAllocated?.toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right font-bold text-slate-800">{ao.remaining?.toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right text-slate-500">{ao.cycleTimeSeconds ? `${ao.cycleTimeSeconds}s` : '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Per-order operations view (classic) */}
               {context && context.availableOperations?.length > 0 && (
                 <div className="overflow-x-auto -mx-2">
+                  <div className="flex items-center gap-2 mb-2 px-2">
+                    <span className="text-xs font-semibold text-slate-500">Per comanda (detaliat)</span>
+                  </div>
                   <table className="w-full text-xs">
                     <thead className="bg-slate-50 sticky top-0">
                       <tr>
@@ -383,10 +429,32 @@ function AllocationModal({ plan, machines, onClose }) {
                 </p>
               </div>
 
-              {/* Qty info */}
+              {/* Qty info — aggregated when available */}
+              {selectedOp.aggregatedTotalQty && selectedOp.orderCount > 1 && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-2.5 mb-1">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Layers size={12} className="text-blue-500" />
+                    <span className="text-[10px] font-semibold text-blue-700 uppercase">Total din TOATE comenzile ({selectedOp.orderCount})</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center">
+                      <p className="text-[10px] text-blue-500">Total agregat</p>
+                      <p className="text-sm font-bold text-blue-800">{selectedOp.aggregatedTotalQty?.toLocaleString()} buc</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-blue-500">Deja alocat</p>
+                      <p className="text-sm font-bold text-blue-800">{selectedOp.alreadyAllocated?.toLocaleString()}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-green-600">Ramas (agregat)</p>
+                      <p className="text-sm font-bold text-green-700">{selectedOp.aggregatedRemaining?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-slate-50 rounded-lg p-2.5 text-center">
-                  <p className="text-[10px] text-slate-400 uppercase">Total comanda</p>
+                  <p className="text-[10px] text-slate-400 uppercase">{selectedOp.orderCount > 1 ? 'Total (aceasta cmd)' : 'Total comanda'}</p>
                   <p className="text-sm font-bold text-slate-700">{selectedOp.totalQty?.toLocaleString()} buc</p>
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2.5 text-center">
@@ -812,6 +880,458 @@ function DemandModal({ onClose }) {
   )
 }
 
+// ─── Modal Alocare Piesa (din tab Piese — agregat) ──────────────────────────
+
+function PieceAllocationModal({ piece, plan, machines, onClose }) {
+  const qc = useQueryClient()
+  const [step, setStep] = useState(1)
+  const [machineId, setMachineId] = useState('')
+  const [selectedOp, setSelectedOp] = useState(null)
+  const [allocQty, setAllocQty] = useState(String(piece.remainingQuantity || 0))
+  const [startDate, setStartDate] = useState(plan.start_date?.split('T')[0] || getMonday())
+  const [endDate, setEndDate] = useState(plan.end_date?.split('T')[0] || '')
+  const [shift, setShift] = useState('Tura I')
+  const [saved, setSaved] = useState(false)
+
+  const activeMachines = machines?.filter(m => m.status === 'active') || []
+  const selectedMachine = activeMachines.find(m => m.id === machineId)
+
+  const { data: shiftDefs } = useQuery({
+    queryKey: ['shift-definitions'],
+    queryFn: () => api.get('/shifts/definitions').then(r => r.data),
+  })
+
+  const shiftOptions = useMemo(() => {
+    if (shiftDefs?.length) return shiftDefs.map(s => s.shift_name || s.shiftName || s.shift_code || s.shiftCode)
+    return SHIFTS
+  }, [shiftDefs])
+
+  // Operations from the piece's MBOM
+  const pieceOps = useMemo(() => {
+    if (!piece.operations) return []
+    return piece.operations.map(op => ({
+      operation: op,
+      productReference: piece.productReference,
+      productName: piece.productName,
+      operationName: op.operation_name || op.operation_type,
+      operationType: op.operation_type,
+      sequence: op.sequence,
+      cycleTimeSeconds: Number(op.cycle_time_seconds) || 0,
+      setupTimeMinutes: Number(op.setup_time_minutes) || 0,
+      machineCode: op.machine_code,
+      machineName: op.machine_name,
+      machineId: op.machine_id,
+    }))
+  }, [piece])
+
+  // Filter operations for selected machine
+  const machineOps = useMemo(() => {
+    if (!machineId) return pieceOps
+    return pieceOps.filter(op => op.machineId === machineId)
+  }, [pieceOps, machineId])
+
+  // Auto-suggest machine from first unallocated operation
+  useEffect(() => {
+    if (!machineId && pieceOps.length > 0) {
+      const firstOp = pieceOps[0]
+      if (firstOp.machineId && activeMachines.find(m => m.id === firstOp.machineId)) {
+        setMachineId(firstOp.machineId)
+      }
+    }
+  }, [pieceOps, activeMachines])
+
+  const calcHours = useMemo(() => {
+    if (!selectedOp || !allocQty) return null
+    const qty = Number(allocQty)
+    if (qty <= 0) return null
+    const cycleS = selectedOp.cycleTimeSeconds || 0
+    const setupM = selectedOp.setupTimeMinutes || 0
+    const productionHours = (qty * cycleS) / 3600
+    const setupHours = setupM / 60
+    const total = productionHours + setupHours
+    return { productionHours, setupHours, total }
+  }, [selectedOp, allocQty])
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.post('/planning/allocations', data),
+    onSuccess: () => {
+      qc.invalidateQueries(['plan-detail', plan.id])
+      qc.invalidateQueries(['planning-dashboard'])
+      qc.invalidateQueries(['planning-pieces'])
+      toast.success('Alocare piesa salvata.')
+      setSaved(true)
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+  })
+
+  const handleAllocate = () => {
+    const qty = Number(allocQty)
+    mutation.mutate({
+      masterPlanId: plan.id,
+      machineId,
+      planDate: startDate,
+      shift,
+      productReference: piece.productReference,
+      productName: piece.productName,
+      productId: piece.productId || null,
+      orderId: null,
+      plannedQty: qty,
+      plannedHours: calcHours ? Math.round(calcHours.total * 100) / 100 : null,
+      notes: `[AGREGAT ${piece.orders?.length} comenzi] ${selectedOp?.operationName || ''} — ${piece.productReference} — ${qty} buc`,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-200 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <Layers size={16} className="text-blue-500" /> Alocare piesa (agregat)
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">{piece.productReference} — {plan.name}</p>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+          </div>
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 mt-3">
+            {[
+              { n: 1, label: 'Utilaj' },
+              { n: 2, label: 'Operatie' },
+              { n: 3, label: 'Configurare' },
+              { n: 4, label: 'Confirmare' },
+            ].map(({ n, label }) => (
+              <div key={n} className="flex items-center gap-1.5">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors
+                  ${step === n ? 'bg-blue-600 text-white' : step > n ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                  {step > n ? <Check size={12} /> : n}
+                </div>
+                <span className={`text-xs font-medium ${step >= n ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
+                {n < 4 && <ChevronRight size={12} className="text-slate-300 mx-1" />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+
+          {/* Aggregated info banner */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Package size={14} className="text-blue-500" />
+              <span className="text-xs font-semibold text-blue-800">Piesa agregata din {piece.orders?.length} comenzi</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-2">
+              <div className="text-center">
+                <p className="text-[10px] text-blue-500 uppercase">Total din TOATE comenzile</p>
+                <p className="text-sm font-bold text-blue-800">{piece.totalQuantity?.toLocaleString()} buc</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] text-blue-500 uppercase">Deja alocat</p>
+                <p className="text-sm font-bold text-blue-800">{piece.allocatedQuantity?.toLocaleString()}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] text-green-600 uppercase">Ramas</p>
+                <p className="text-sm font-bold text-green-700">{piece.remainingQuantity?.toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] text-blue-500">
+              {piece.orders?.map((o, i) => (
+                <span key={i}>
+                  {i > 0 && ' + '}
+                  {o.orderNumber} ({o.quantity?.toLocaleString()} buc{o.clientName ? `, ${o.clientName}` : ''})
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Step 1: Select Machine */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 mb-1.5 block font-medium">Selecteaza utilaj</label>
+                <select className="input" value={machineId} onChange={e => setMachineId(e.target.value)}>
+                  <option value="">-- Alege utilaj --</option>
+                  {activeMachines.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.code} — {m.name} {m.type ? `[${m.type}]` : ''} {m.location ? `(${m.location})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Suggest machines from MBOM */}
+              {pieceOps.length > 0 && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1.5 block font-medium">Utilaje recomandate (din MBOM)</label>
+                  <div className="grid gap-1.5">
+                    {[...new Map(pieceOps.filter(op => op.machineId).map(op => [op.machineId, op])).values()].map((op, i) => {
+                      const isSelected = machineId === op.machineId
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => setMachineId(op.machineId)}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 border cursor-pointer transition-colors
+                            ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-100 hover:border-blue-200'}`}
+                        >
+                          <span className="text-xs font-bold text-blue-600 bg-blue-50 rounded px-1.5 py-0.5">{op.machineCode}</span>
+                          <span className="text-xs text-slate-600">{op.machineName}</span>
+                          <span className="text-[10px] text-slate-400 ml-auto">{op.operationName}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Select Operation */}
+          {step === 2 && (
+            <div className="space-y-3">
+              {machineOps.length === 0 && (
+                <div className="text-center py-8 text-slate-400">
+                  <AlertTriangle size={28} className="mx-auto mb-2 text-amber-400" />
+                  <p className="text-sm">Nicio operatie MBOM gasita pentru {selectedMachine?.code || 'acest utilaj'}.</p>
+                  <p className="text-xs mt-1">Operatiile definite in BOM nu corespund cu utilajul selectat.</p>
+                  {pieceOps.length > 0 && (
+                    <p className="text-xs mt-2 text-slate-500">Toate operatiile disponibile pentru aceasta piesa:</p>
+                  )}
+                </div>
+              )}
+              {(machineOps.length > 0 ? machineOps : pieceOps).map((op, i) => (
+                <div
+                  key={i}
+                  onClick={() => { setSelectedOp(op); setAllocQty(String(piece.remainingQuantity)); setStep(3) }}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-3 border cursor-pointer transition-colors
+                    ${selectedOp?.operation?.id === op.operation?.id ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-100 hover:border-blue-200'}`}
+                >
+                  <span className="font-mono text-blue-600 font-bold text-xs">OP{String(op.sequence).padStart(2, '0')}</span>
+                  <div className="flex-1">
+                    <span className="text-xs font-medium text-slate-700">{op.operationName || op.operationType}</span>
+                    {op.machineCode && (
+                      <span className="text-[10px] text-slate-400 ml-2">[{op.machineCode}]</span>
+                    )}
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    {op.cycleTimeSeconds > 0 && <span>{op.cycleTimeSeconds}s/buc</span>}
+                    {op.setupTimeMinutes > 0 && <span className="ml-2">setup {op.setupTimeMinutes}min</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Step 3: Configure Allocation */}
+          {step === 3 && selectedOp && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 rounded-lg p-3">
+                <p className="font-semibold text-blue-800 text-sm">
+                  {piece.productReference} — {selectedOp.operationName || selectedOp.operationType}
+                  {' '}pe {selectedMachine?.code}
+                </p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  Agregat din {piece.orders?.length} comenzi — o singura alocare
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block font-medium">Cantitate de alocat (buc) *</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max={piece.remainingQuantity}
+                    value={allocQty}
+                    onChange={e => setAllocQty(e.target.value)}
+                    placeholder={`max ${piece.remainingQuantity}`}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Se aloca o singura cantitate agregata (nu per comanda). Setup unic!
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block font-medium">Data start *</label>
+                    <input className="input" type="date" value={startDate}
+                      min={plan.start_date?.split('T')[0]}
+                      max={plan.end_date?.split('T')[0]}
+                      onChange={e => setStartDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block font-medium">Data sfarsit</label>
+                    <input className="input" type="date" value={endDate}
+                      min={startDate}
+                      max={plan.end_date?.split('T')[0]}
+                      onChange={e => setEndDate(e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block font-medium">Tura *</label>
+                  <select className="input" value={shift} onChange={e => setShift(e.target.value)}>
+                    {shiftOptions.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {calcHours && (
+                <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
+                  <span className="font-medium">{Number(allocQty).toLocaleString()} buc</span>
+                  {' x '}
+                  <span>{selectedOp.cycleTimeSeconds}s</span>
+                  {' = '}
+                  <span className="font-medium">{calcHours.productionHours.toFixed(2)}h</span>
+                  {selectedOp.setupTimeMinutes > 0 && (
+                    <>
+                      {' + setup '}
+                      <span className="font-medium">{selectedOp.setupTimeMinutes}min (o singura data!)</span>
+                    </>
+                  )}
+                  {' = '}
+                  <span className="font-bold text-blue-700">{calcHours.total.toFixed(2)}h total</span>
+                </div>
+              )}
+
+              {/* Setup savings info */}
+              {piece.orders?.length > 1 && selectedOp.setupTimeMinutes > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex gap-2">
+                  <Check size={16} className="text-green-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-green-700">
+                    Economie setup: in loc de {piece.orders.length} setup-uri x {selectedOp.setupTimeMinutes}min = {piece.orders.length * selectedOp.setupTimeMinutes}min,
+                    faceti doar 1 setup de {selectedOp.setupTimeMinutes}min.
+                    <span className="font-bold"> Economie: {(piece.orders.length - 1) * selectedOp.setupTimeMinutes}min</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Confirm */}
+          {step === 4 && selectedOp && !saved && (
+            <div className="space-y-4">
+              <h4 className="font-medium text-slate-700 text-sm">Confirmare alocare agregata</h4>
+              <div className="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Utilaj</span>
+                  <span className="font-medium text-slate-800">{selectedMachine?.code} — {selectedMachine?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Piesa</span>
+                  <span className="font-medium text-slate-800">{piece.productReference}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Operatie</span>
+                  <span className="font-medium text-slate-800">{selectedOp.operationName || selectedOp.operationType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Comenzi agregate</span>
+                  <span className="font-medium text-slate-800">{piece.orders?.length} comenzi</span>
+                </div>
+                <hr className="border-slate-200" />
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Cantitate TOTALA</span>
+                  <span className="font-bold text-slate-800">{Number(allocQty).toLocaleString()} buc</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Data</span>
+                  <span className="font-medium text-slate-800">{startDate}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tura</span>
+                  <span className="font-medium text-slate-800">{shift}</span>
+                </div>
+                {calcHours && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Ore planificate</span>
+                    <span className="font-bold text-blue-700">{calcHours.total.toFixed(2)}h</span>
+                  </div>
+                )}
+              </div>
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
+                Se creeaza o SINGURA alocare pentru {Number(allocQty).toLocaleString()} buc {piece.productReference},
+                acoperind {piece.orders?.length} comenzi. Setup unic!
+              </div>
+            </div>
+          )}
+
+          {/* After save */}
+          {step === 4 && saved && (
+            <div className="space-y-4 text-center py-4">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                <Check size={24} className="text-green-600" />
+              </div>
+              <p className="text-sm font-medium text-slate-700">Alocare agregata salvata cu succes!</p>
+              <p className="text-xs text-slate-500">
+                {Number(allocQty).toLocaleString()} buc {piece.productReference} alocate pe {selectedMachine?.code}
+                {' '}({piece.orders?.length} comenzi acoperite)
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer navigation */}
+        <div className="px-6 py-3 border-t border-slate-200 flex justify-between flex-shrink-0">
+          <div>
+            {step > 1 && !saved && (
+              <button onClick={() => setStep(step - 1)} className="btn-secondary text-xs flex items-center gap-1">
+                <ArrowLeft size={13} /> Inapoi
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-secondary text-xs">
+              {saved ? 'Inchide' : 'Anuleaza'}
+            </button>
+            {step === 1 && (
+              <button
+                onClick={() => setStep(2)}
+                disabled={!machineId}
+                className="btn-primary text-xs flex items-center gap-1"
+              >
+                Urmatorul <ArrowRight size={13} />
+              </button>
+            )}
+            {step === 2 && (
+              <button
+                onClick={() => setStep(3)}
+                disabled={!selectedOp}
+                className="btn-primary text-xs flex items-center gap-1"
+              >
+                Configureaza <ArrowRight size={13} />
+              </button>
+            )}
+            {step === 3 && (
+              <button
+                onClick={() => setStep(4)}
+                disabled={!allocQty || Number(allocQty) <= 0 || Number(allocQty) > piece.remainingQuantity || !startDate}
+                className="btn-primary text-xs flex items-center gap-1"
+              >
+                Verifica <ArrowRight size={13} />
+              </button>
+            )}
+            {step === 4 && !saved && (
+              <button
+                onClick={handleAllocate}
+                disabled={mutation.isPending}
+                className="btn-primary text-xs flex items-center gap-1"
+              >
+                {mutation.isPending ? (
+                  <><Loader2 size={13} className="animate-spin" /> Se salveaza...</>
+                ) : (
+                  <><Check size={13} /> Aloca agregat</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Detalii Plan ─────────────────────────────────────────────────────────────
 
 function PlanDetail({ plan, machines, onClose }) {
@@ -975,6 +1495,16 @@ export default function PlanningPage() {
     enabled: tab === 'capacity',
   })
 
+  // Aggregated pieces from all orders
+  const { data: pieces, isLoading: piecesLoading } = useQuery({
+    queryKey: ['planning-pieces'],
+    queryFn: () => api.get('/planning/pieces').then(r => r.data),
+    enabled: tab === 'pieces',
+  })
+
+  const [expandedPiece, setExpandedPiece] = useState(null)
+  const [pieceAllocModal, setPieceAllocModal] = useState(null)
+
   // In fullscreen mode, auto-switch to dashboard and hide chrome
   if (isFullscreen) {
     return (
@@ -1062,7 +1592,7 @@ export default function PlanningPage() {
       </div>
 
       <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
-        {[['plans', 'Planuri'], ['dashboard', 'Dashboard'], ['demands', 'Cereri'], ['capacity', 'Capacitate'], ['ctp', 'CTP']].map(([t, l]) => (
+        {[['plans', 'Planuri'], ['pieces', 'Piese'], ['dashboard', 'Dashboard'], ['demands', 'Cereri'], ['capacity', 'Capacitate'], ['ctp', 'CTP']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors
               ${tab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -1137,6 +1667,218 @@ export default function PlanningPage() {
               <Calendar size={32} className="mx-auto mb-2 text-slate-300" />
               Niciun plan. Apasa "Plan nou" pentru a incepe.
             </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'pieces' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers size={16} className="text-blue-500" />
+                <h4 className="font-medium text-slate-700">Piese de fabricat (agregate din toate comenzile)</h4>
+              </div>
+              {pieces && <span className="text-xs text-slate-400">{pieces.length} piese distincte</span>}
+            </div>
+            {piecesLoading && (
+              <div className="flex items-center gap-2 text-sm text-slate-400 py-8 justify-center">
+                <Loader2 size={16} className="animate-spin" /> Se agreg piese din comenzi...
+              </div>
+            )}
+            {pieces && pieces.length === 0 && (
+              <div className="text-center py-8 text-slate-400">
+                <Package size={28} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-sm">Nicio piesa de fabricat. Adaugati comenzi active cu produse definite in BOM.</p>
+              </div>
+            )}
+            {pieces && pieces.length > 0 && (
+              <div>
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="w-8 px-2"></th>
+                      <th className="text-left px-3 py-2.5 font-medium text-slate-600">Piesa</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-slate-600">Total</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-slate-600">Alocat</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-slate-600">Ramas</th>
+                      <th className="text-center px-3 py-2.5 font-medium text-slate-600">Comenzi</th>
+                      <th className="text-center px-3 py-2.5 font-medium text-slate-600">Op</th>
+                      <th className="text-left px-3 py-2.5 font-medium text-slate-600">Deadline</th>
+                      <th className="text-center px-3 py-2.5 font-medium text-slate-600">Prior.</th>
+                      <th className="text-center px-3 py-2.5 font-medium text-slate-600">MBOM</th>
+                      <th className="px-3 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pieces.map((piece) => {
+                      const isExpanded = expandedPiece === piece.productReference
+                      const allocPct = piece.totalQuantity > 0 ? (piece.allocatedQuantity / piece.totalQuantity) * 100 : 0
+                      const now = new Date()
+                      const deadlineDate = piece.earliestDeadline ? new Date(piece.earliestDeadline) : null
+                      const daysUntilDeadline = deadlineDate ? Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24)) : null
+
+                      // Color coding
+                      let rowColor = ''
+                      if (piece.mbomStatus === 'unknown' || !piece.operations?.length) {
+                        rowColor = 'bg-slate-50 text-slate-400'
+                      } else if (allocPct >= 100) {
+                        rowColor = 'bg-green-50'
+                      } else if (allocPct > 0) {
+                        rowColor = 'bg-amber-50/50'
+                      } else if (daysUntilDeadline !== null && daysUntilDeadline <= 7) {
+                        rowColor = 'bg-red-50'
+                      }
+
+                      const priorityColors = {
+                        urgent: 'bg-red-100 text-red-700',
+                        high: 'bg-orange-100 text-orange-700',
+                        normal: 'bg-blue-100 text-blue-700',
+                        low: 'bg-slate-100 text-slate-500',
+                      }
+
+                      const mbomIcon = piece.operations?.length > 0
+                        ? (piece.mbomStatus === 'approved' ? '\u2705' : '\u26A0\uFE0F')
+                        : '\u274C'
+
+                      return (
+                        <React.Fragment key={piece.productReference}>
+                          <tr
+                            className={`cursor-pointer hover:bg-blue-50/50 transition-colors ${rowColor}`}
+                            onClick={() => setExpandedPiece(isExpanded ? null : piece.productReference)}
+                          >
+                            <td className="px-2 text-center">
+                              <ChevronDown size={14} className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="font-semibold text-slate-800">{piece.productReference}</span>
+                              {piece.productName && piece.productName !== piece.productReference && (
+                                <span className="text-xs text-slate-400 ml-1.5">{piece.productName}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-bold text-slate-700">{piece.totalQuantity.toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-500">{piece.allocatedQuantity.toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-right font-bold text-slate-800">{piece.remainingQuantity.toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-center text-slate-500">{piece.orders?.length || 0}</td>
+                            <td className="px-3 py-2.5 text-center text-slate-500">{piece.operations?.length || 0}</td>
+                            <td className="px-3 py-2.5 text-slate-500 text-xs">
+                              {piece.earliestDeadline
+                                ? new Date(piece.earliestDeadline).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' })
+                                : '\u2014'}
+                              {daysUntilDeadline !== null && daysUntilDeadline <= 7 && (
+                                <span className="text-red-500 font-medium ml-1">(!)</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${priorityColors[piece.highestPriority] || 'bg-slate-100 text-slate-500'}`}>
+                                {piece.highestPriority}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center text-sm">{mbomIcon}</td>
+                            <td className="px-3 py-2.5 text-right">
+                              {piece.remainingQuantity > 0 && piece.operations?.length > 0 && plans?.data?.length > 0 && isManager && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setPieceAllocModal(piece) }}
+                                  className="btn-primary text-[10px] px-2 py-1"
+                                >
+                                  Aloca piesa
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={11} className="bg-slate-50/80 px-4 py-3 border-b">
+                                <div className="space-y-3">
+                                  {/* Progress bar */}
+                                  <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] text-slate-500 uppercase tracking-wide">Progres alocare</span>
+                                      <span className="text-xs font-medium text-slate-600">{Math.round(allocPct)}%</span>
+                                    </div>
+                                    <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${allocPct >= 100 ? 'bg-green-500' : allocPct > 0 ? 'bg-amber-500' : 'bg-slate-300'}`}
+                                        style={{ width: `${Math.min(100, allocPct)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Orders breakdown */}
+                                  <div>
+                                    <h5 className="text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Comenzi ({piece.orders?.length})</h5>
+                                    <div className="grid gap-1.5">
+                                      {piece.orders?.map((o, i) => (
+                                        <div key={i} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-100 text-xs">
+                                          <span className="font-bold text-blue-600">{o.orderNumber || '\u2014'}</span>
+                                          <span className="font-medium text-slate-700">{o.quantity?.toLocaleString()} buc</span>
+                                          {o.clientName && <span className="text-slate-400">{o.clientName}</span>}
+                                          {o.deadline && (
+                                            <span className="text-slate-400">
+                                              deadline {new Date(o.deadline).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' })}
+                                            </span>
+                                          )}
+                                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${priorityColors[o.priority] || 'bg-slate-100 text-slate-500'}`}>
+                                            {o.priority}
+                                          </span>
+                                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500'}`}>
+                                            {STATUS_LABELS[o.status] || o.status}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Operations list */}
+                                  {piece.operations?.length > 0 && (
+                                    <div>
+                                      <h5 className="text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Operatii MBOM ({piece.operations.length})</h5>
+                                      <div className="grid gap-1.5">
+                                        {piece.operations.map((op, i) => (
+                                          <div key={i} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-100 text-xs">
+                                            <span className="font-mono text-blue-600 font-bold">OP{String(op.sequence).padStart(2, '0')}</span>
+                                            <span className="font-medium text-slate-700">{op.operation_name || op.operation_type || '\u2014'}</span>
+                                            {op.machine_code && (
+                                              <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-medium">{op.machine_code}</span>
+                                            )}
+                                            {op.machine_name && <span className="text-slate-400">{op.machine_name}</span>}
+                                            {op.cycle_time_seconds > 0 && <span className="text-slate-500">{op.cycle_time_seconds}s/buc</span>}
+                                            {op.setup_time_minutes > 0 && <span className="text-slate-400">setup {op.setup_time_minutes}min</span>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Total production time */}
+                                  {piece.totalProductionHours > 0 && (
+                                    <div className="bg-blue-50 rounded-lg p-2.5 text-xs text-blue-700">
+                                      <span className="font-medium">Timp total estimat productie:</span>{' '}
+                                      <span className="font-bold">{piece.totalProductionHours.toFixed(1)}h</span>
+                                      <span className="text-blue-500 ml-1">
+                                        ({piece.totalQuantity.toLocaleString()} buc x {piece.operations?.length || 0} operatii)
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {pieceAllocModal && plans?.data?.length > 0 && (
+            <PieceAllocationModal
+              piece={pieceAllocModal}
+              plan={plans.data.find(p => p.status === 'active' || p.status === 'draft') || plans.data[0]}
+              machines={machines}
+              onClose={() => setPieceAllocModal(null)}
+            />
           )}
         </div>
       )}

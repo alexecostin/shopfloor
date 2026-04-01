@@ -7,7 +7,7 @@ import SearchableSelect from '../components/SearchableSelect'
 import { formatMoney } from '../utils/currency'
 import {
   Plus, ShoppingCart, X, Send, CheckCircle, Package,
-  Trash2, AlertTriangle, FileText, ChevronRight,
+  Trash2, AlertTriangle, FileText, ChevronRight, Calculator, Loader2, Truck,
 } from 'lucide-react'
 
 const STATUS_CFG = {
@@ -660,6 +660,137 @@ function DeficitTab() {
   )
 }
 
+/* ─── Aggregated MRP Purchasing tab ───────────────────────────────────────── */
+
+function AggregatedMRPTab() {
+  const qc = useQueryClient()
+  const [result, setResult] = useState(null)
+
+  // Fetch active work orders for calculating aggregated POs
+  const { data: workOrders, isLoading: woLoading } = useQuery({
+    queryKey: ['active-work-orders'],
+    queryFn: () => api.get('/work-orders', { params: { status: 'planned,released,in_progress', limit: 500 } }).then(r => {
+      const items = r.data?.data || r.data || []
+      return Array.isArray(items) ? items : []
+    }),
+  })
+
+  const calcMut = useMutation({
+    mutationFn: (ids) => api.post('/inventory/mrp/aggregated-pos', { workOrderIds: ids }).then(r => r.data),
+    onSuccess: (data) => { setResult(data); toast.success(`Necesar agregat calculat: ${data.suppliers?.length || 0} furnizori.`) },
+    onError: (e) => {
+      const msg = e.response?.data?.message || ''
+      toast.error(msg || 'Eroare la calcularea necesarului agregat.')
+    },
+  })
+
+  const createPOMut = useMutation({
+    mutationFn: (supplierGroup) => api.post('/inventory/mrp/create-pos', { suppliers: [supplierGroup] }).then(r => r.data),
+    onSuccess: (data) => {
+      qc.invalidateQueries(['purchasing-orders'])
+      const po = data[0]
+      toast.success(`PO ${po?.poNumber} creat pentru ${po?.supplierName} — ${po?.lines} linii.`)
+    },
+    onError: (e) => {
+      const msg = e.response?.data?.message || ''
+      toast.error(msg || 'Eroare la crearea PO.')
+    },
+  })
+
+  function handleCalculate() {
+    const ids = (workOrders || []).map(wo => wo.id)
+    if (ids.length === 0) {
+      toast.error('Nu exista comenzi de lucru active.')
+      return
+    }
+    calcMut.mutate(ids)
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={handleCalculate}
+          disabled={calcMut.isPending || woLoading}
+          className="btn-primary flex items-center gap-2"
+        >
+          {calcMut.isPending ? <Loader2 size={15} className="animate-spin" /> : <Calculator size={15} />}
+          {calcMut.isPending ? 'Se calculeaza...' : 'Calculeaza necesar agregat'}
+        </button>
+        {woLoading && <span className="text-xs text-slate-400">Se incarca comenzile...</span>}
+        {!woLoading && workOrders && <span className="text-xs text-slate-400">{workOrders.length} comenzi de lucru active</span>}
+      </div>
+
+      {result && result.suppliers?.length === 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">
+          <CheckCircle size={32} className="mx-auto mb-2 text-emerald-400" />
+          <p className="text-sm">Nu exista deficit de materiale. Toate stocurile acopera necesarul.</p>
+        </div>
+      )}
+
+      {result && result.suppliers?.length > 0 && (
+        <>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+            <div className="flex items-center gap-6 text-sm">
+              <div><span className="text-blue-600 font-medium">{result.suppliers.length}</span> <span className="text-blue-500">furnizori</span></div>
+              <div><span className="text-blue-600 font-medium">{result.totalDeficitItems}</span> <span className="text-blue-500">articole deficit</span></div>
+              <div><span className="text-blue-600 font-bold">{formatMoney(result.totalEstimatedCost, 'RON')}</span> <span className="text-blue-500">cost total estimat</span></div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {result.suppliers.map(group => (
+              <div key={group.supplierId} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b">
+                  <div className="flex items-center gap-3">
+                    <Truck size={16} className="text-slate-500" />
+                    <span className="font-semibold text-sm text-slate-800">{group.supplierName}</span>
+                    <span className="text-xs text-slate-400">{group.lines.length} articole</span>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                      {formatMoney(group.totalEstimatedCost, 'RON')} estimat
+                    </span>
+                    {group.maxLeadTimeDays > 0 && (
+                      <span className="text-xs text-slate-400">Lead time: {group.maxLeadTimeDays} zile</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => createPOMut.mutate(group)}
+                    disabled={createPOMut.isPending}
+                    className="btn-primary text-xs flex items-center gap-1.5"
+                  >
+                    <FileText size={12} /> {createPOMut.isPending ? 'Se genereaza...' : 'Genereaza PO'}
+                  </button>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {group.lines.map((line, idx) => (
+                    <div key={idx} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 text-xs">
+                      <div className="flex-1">
+                        <span className="text-slate-800 font-medium">{line.materialName}</span>
+                        {line.materialCode && <span className="text-slate-400 ml-1.5">({line.materialCode})</span>}
+                      </div>
+                      <div className="flex items-center gap-4 text-right">
+                        <span className="text-slate-600 w-28">
+                          {Number(line.quantity).toLocaleString('ro-RO')} {line.unit} x {Number(line.unitPrice || 0).toFixed(2)}
+                        </span>
+                        <span className="font-bold text-slate-800 w-24">{formatMoney(line.totalPrice, 'RON')}</span>
+                        {line.neededForOrders && (
+                          <span className="text-slate-400 truncate max-w-[200px]" title={line.neededForOrders}>
+                            {line.neededForOrders}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
 /* ─── Main Page ────────────────────────────────────────────────────────────── */
 
 export default function PurchasingPage() {
@@ -672,7 +803,7 @@ export default function PurchasingPage() {
       </div>
 
       <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
-        {[['orders', 'Comenzi furnizor'], ['deficit', 'De la Necesar']].map(([t, l]) => (
+        {[['orders', 'Comenzi furnizor'], ['deficit', 'De la Necesar'], ['aggregated', 'Necesar Agregat MRP']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors
               ${tab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -683,6 +814,7 @@ export default function PurchasingPage() {
 
       {tab === 'orders' && <POOrdersTab />}
       {tab === 'deficit' && <DeficitTab />}
+      {tab === 'aggregated' && <AggregatedMRPTab />}
     </div>
   )
 }

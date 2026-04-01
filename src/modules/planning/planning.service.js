@@ -256,23 +256,30 @@ export async function getAllocationContext(machineId) {
     .whereIn('status', ['planned', 'released', 'in_progress'])
     .select('*');
 
-  // Match orders to operations
+  // Match orders to operations — aggregate by product_reference per operation
   const results = [];
+  const aggregatedResults = [];
+
   for (const op of allOps) {
     const matchingOrders = activeOrders.filter(wo =>
       wo.product_reference === op.product_reference ||
       wo.product_name === op.product_name
     );
 
-    for (const order of matchingOrders) {
-      // Calculate already allocated qty for this operation on any machine
-      const [{ allocated }] = await db('planning.daily_allocations')
-        .where('product_reference', op.product_reference)
-        .whereNot('status', 'cancelled')
-        .sum('planned_qty as allocated');
+    // Calculate already allocated qty for this product_reference
+    const [{ allocated }] = await db('planning.daily_allocations')
+      .where('product_reference', op.product_reference)
+      .whereNot('status', 'cancelled')
+      .sum('planned_qty as allocated');
+    const alreadyAllocated = Number(allocated) || 0;
 
+    // Aggregated total across ALL orders for this product
+    const aggregatedTotalQty = matchingOrders.reduce((sum, wo) => sum + (wo.quantity || 0), 0);
+    const aggregatedRemaining = Math.max(0, aggregatedTotalQty - alreadyAllocated);
+
+    // Per-order results (legacy)
+    for (const order of matchingOrders) {
       const totalQty = order.quantity || 0;
-      const alreadyAllocated = Number(allocated) || 0;
       const remaining = Math.max(0, totalQty - alreadyAllocated);
 
       if (remaining > 0) {
@@ -293,14 +300,44 @@ export async function getAllocationContext(machineId) {
           totalQty,
           alreadyAllocated,
           remaining,
+          // Aggregated info
+          aggregatedTotalQty,
+          aggregatedRemaining,
+          orderCount: matchingOrders.length,
           cycleTimeSeconds: Number(op.cycle_time_seconds) || 0,
           setupTimeMinutes: Number(op.setup_time_minutes) || 0,
         });
       }
     }
+
+    // Aggregated result (one row per product+operation)
+    if (aggregatedRemaining > 0 && matchingOrders.length > 0) {
+      aggregatedResults.push({
+        operation: op,
+        orders: matchingOrders.map(wo => ({
+          id: wo.id,
+          orderNumber: wo.work_order_number,
+          orderRef: wo.order_number,
+          clientName: op.bom_client_name || wo.client_name || null,
+          deadline: wo.scheduled_end || null,
+          quantity: wo.quantity,
+        })),
+        productReference: op.product_reference,
+        productName: op.product_name,
+        operationName: op.operation_name,
+        operationType: op.operation_type,
+        sequence: op.sequence,
+        totalQty: aggregatedTotalQty,
+        alreadyAllocated,
+        remaining: aggregatedRemaining,
+        orderCount: matchingOrders.length,
+        cycleTimeSeconds: Number(op.cycle_time_seconds) || 0,
+        setupTimeMinutes: Number(op.setup_time_minutes) || 0,
+      });
+    }
   }
 
-  return { machine, availableOperations: results };
+  return { machine, availableOperations: results, aggregatedOperations: aggregatedResults };
 }
 
 /**

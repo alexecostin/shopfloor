@@ -5,6 +5,7 @@ import * as v from './inventory.validation.js';
 import * as c from './inventory.controller.js';
 import * as suppliers from './item-suppliers.service.js';
 import * as mrpSvc from '../../services/mrp.service.js';
+import * as aggPurchasing from '../../services/aggregated-purchasing.service.js';
 
 const router = Router();
 const mgr = authorize('admin', 'production_manager');
@@ -77,6 +78,29 @@ router.post('/mrp/generate-pos', authenticate, mgr, async (req, res, next) => {
       return res.status(400).json({ message: 'requirements este obligatoriu si trebuie sa fie un array.' });
     }
     const pos = await mrpSvc.generatePOsFromMRP(requirements, req.user?.id);
+    res.json(pos);
+  } catch (e) { next(e); }
+});
+
+// Aggregated Purchasing from MRP
+router.post('/mrp/aggregated-pos', authenticate, mgr, async (req, res, next) => {
+  try {
+    const { workOrderIds } = req.body;
+    if (!Array.isArray(workOrderIds) || workOrderIds.length === 0) {
+      return res.status(400).json({ message: 'workOrderIds este obligatoriu si trebuie sa fie un array.' });
+    }
+    const result = await aggPurchasing.generateAggregatedPOs(workOrderIds);
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.post('/mrp/create-pos', authenticate, mgr, async (req, res, next) => {
+  try {
+    const { suppliers: supplierGroups } = req.body;
+    if (!Array.isArray(supplierGroups) || supplierGroups.length === 0) {
+      return res.status(400).json({ message: 'suppliers este obligatoriu si trebuie sa fie un array.' });
+    }
+    const pos = await aggPurchasing.createAggregatedPOs(supplierGroups, req.user?.userId || req.user?.id);
     res.json(pos);
   } catch (e) { next(e); }
 });
