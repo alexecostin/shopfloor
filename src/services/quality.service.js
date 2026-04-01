@@ -50,11 +50,17 @@ export async function createPlan(body) {
   const { product_id, plan_name, characteristics, sampling_rule, is_active, tenant_id, created_by } = body;
   if (!plan_name) throw badRequest('plan_name obligatoriu.', 'PLAN_NAME_LIPSA');
 
+  // Accept both JSON string and array for characteristics
+  let parsedChars = characteristics || [];
+  if (typeof parsedChars === 'string') {
+    try { parsedChars = JSON.parse(parsedChars); } catch { parsedChars = []; }
+  }
+
   const [plan] = await db(PLANS).insert({
     product_id: product_id || null,
     plan_name,
-    characteristics: JSON.stringify(characteristics || []),
-    sampling_rule: sampling_rule ? JSON.stringify(sampling_rule) : null,
+    characteristics: JSON.stringify(parsedChars),
+    sampling_rule: sampling_rule ? (typeof sampling_rule === 'string' ? sampling_rule : JSON.stringify(sampling_rule)) : null,
     is_active: is_active !== false,
     tenant_id: tenant_id || null,
     created_by: created_by || null,
@@ -149,6 +155,36 @@ export async function createMeasurement(body) {
   }).returning('*');
 
   return measurement;
+}
+
+// ── Measurement Report per Order ─────────────────────────────────────────
+
+export async function getMeasurementReport(orderId) {
+  // Get all measurements for this order
+  const measurements = await db(MEAS)
+    .where('order_id', orderId)
+    .orderBy('created_at');
+
+  // Get the measurement plans
+  const plans = [];
+  for (const m of measurements) {
+    if (m.plan_id) {
+      const plan = await db(PLANS).where('id', m.plan_id).first();
+      if (plan && !plans.find(p => p.id === plan.id)) plans.push(plan);
+    }
+  }
+
+  return {
+    orderId,
+    measurements,
+    plans,
+    totalMeasurements: measurements.length,
+    passedCount: measurements.filter(m => m.overall_result === 'pass').length,
+    failedCount: measurements.filter(m => m.overall_result === 'fail').length,
+    overallStatus: measurements.length === 0
+      ? 'NO_DATA'
+      : measurements.every(m => m.overall_result === 'pass') ? 'CONFORMANT' : 'NON-CONFORMANT',
+  };
 }
 
 // ── First Article Inspection ─────────────────────────────────────────────

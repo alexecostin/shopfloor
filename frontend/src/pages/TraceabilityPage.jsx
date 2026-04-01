@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
+import SearchableSelect from '../components/SearchableSelect'
 import {
   Package, Hash, GitBranch, ChevronDown, ChevronRight,
   Plus, Search, ArrowRight, ArrowLeft, Box, FileText, Truck, ShoppingCart
@@ -289,12 +290,29 @@ function CreateLotModal({ onClose, onSubmit, loading }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Articol ID</label>
-              <input className="input w-full" value={form.item_id} onChange={e => setForm(f => ({ ...f, item_id: e.target.value }))} />
+              <label className="block text-sm text-slate-600 mb-1">Articol</label>
+              <SearchableSelect
+                endpoint="/inventory/items"
+                labelField="name"
+                valueField="id"
+                placeholder="Cauta articol din inventar..."
+                value={form.item_id || null}
+                onChange={(id, item) => setForm(f => ({ ...f, item_id: id || '', unit: item?.unit || f.unit }))}
+                allowCreate={false}
+              />
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Furnizor ID</label>
-              <input className="input w-full" value={form.supplier_id} onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))} />
+              <label className="block text-sm text-slate-600 mb-1">Furnizor</label>
+              <SearchableSelect
+                endpoint="/companies"
+                filterParams={{ companyType: 'supplier' }}
+                labelField="name"
+                valueField="id"
+                placeholder="Cauta furnizor..."
+                value={form.supplier_id || null}
+                onChange={(id) => setForm(f => ({ ...f, supplier_id: id || '' }))}
+                allowCreate={false}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

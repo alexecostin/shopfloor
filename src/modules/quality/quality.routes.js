@@ -66,6 +66,16 @@ router.get('/measurements/:id', async (req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// MEASUREMENT REPORT (per order, for shipping)
+// ═══════════════════════════════════════════════════════════════════════
+
+router.get('/report/:orderId', async (req, res, next) => {
+  try {
+    res.json(await svc.getMeasurementReport(req.params.orderId));
+  } catch (e) { next(e); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // FIRST ARTICLE INSPECTION
 // ═══════════════════════════════════════════════════════════════════════
 

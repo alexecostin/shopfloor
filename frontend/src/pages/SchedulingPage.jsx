@@ -60,6 +60,7 @@ const CONSTRAINT_OPTIONS = [
   { key: 'allow_overtime', label: 'Permite overtime' },
   { key: 'respect_dependencies', label: 'Respecta dependinte BOM' },
   { key: 'minimize_changeovers', label: 'Minimizeaza schimbarile' },
+  { key: 'allow_weekend', label: 'Permite lucru in weekend' },
 ]
 
 const DEFAULT_PRIORITIES = [
@@ -73,6 +74,9 @@ const DEFAULT_CONSTRAINTS = {
   allow_overtime: false,
   respect_dependencies: false,
   minimize_changeovers: false,
+  allow_weekend: false,
+  max_shifts_per_day: 2,
+  overtime_percent: 10,
 }
 
 function parsePriorities(raw) {
@@ -305,6 +309,25 @@ function ConfigsTab() {
                       <span className="text-sm text-slate-700 group-hover:text-slate-900">{opt.label}</span>
                     </label>
                   ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Nr. schimburi / zi</label>
+                    <select className="input" value={form.constraints.max_shifts_per_day || 2}
+                      onChange={e => setForm({ ...form, constraints: { ...form.constraints, max_shifts_per_day: Number(e.target.value) } })}>
+                      <option value={1}>1 schimb</option>
+                      <option value={2}>2 schimburi</option>
+                      <option value={3}>3 schimburi</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Overtime permis (%)</label>
+                    <input type="number" className="input" min="0" max="100" step="0.5"
+                      value={form.constraints.overtime_percent ?? 10}
+                      onChange={e => setForm({ ...form, constraints: { ...form.constraints, overtime_percent: Number(e.target.value) } })}
+                      placeholder="Ex: 7.5, 12" />
+                    <p className="text-[10px] text-slate-400 mt-0.5">Ore suplimentare peste programul normal</p>
+                  </div>
                 </div>
               </div>
 
@@ -589,7 +612,14 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
 function SimulationsTab() {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
-  const [simForm, setSimForm] = useState({ name: '', description: '', scenario_params: '' })
+  const [simForm, setSimForm] = useState({
+    name: '', description: '',
+    disabled_machines: [],
+    urgent_orders: [],
+    allow_overtime: false,
+    period_from: '',
+    period_to: '',
+  })
   const [selectedSim, setSelectedSim] = useState(null)
 
   const { data: simulations = [], isLoading } = useQuery({
@@ -597,9 +627,28 @@ function SimulationsTab() {
     queryFn: () => api.get('/scheduling/simulations').then(r => r.data),
   })
 
+  const { data: machinesData } = useQuery({
+    queryKey: ['scheduling-machines-list'],
+    queryFn: () => api.get('/machines', { params: { limit: 500 } }).then(r => {
+      const d = r.data
+      return Array.isArray(d) ? d : (d?.data || [])
+    }),
+  })
+
+  const { data: woData } = useQuery({
+    queryKey: ['scheduling-work-orders'],
+    queryFn: () => api.get('/work-orders', { params: { limit: 200 } }).then(r => {
+      const d = r.data
+      return Array.isArray(d) ? d : (d?.data || [])
+    }),
+  })
+
+  const machinesList = machinesData || []
+  const workOrdersList = woData || []
+
   const createMut = useMutation({
     mutationFn: data => api.post('/scheduling/simulations', data),
-    onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); setShowCreate(false); setSimForm({ name: '', description: '', scenario_params: '' }); toast.success('Simulare creata.') },
+    onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); setShowCreate(false); setSimForm({ name: '', description: '', disabled_machines: [], urgent_orders: [], allow_overtime: false, period_from: '', period_to: '' }); toast.success('Simulare creata.') },
     onError: (e) => {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
@@ -663,7 +712,7 @@ function SimulationsTab() {
       {/* Create simulation modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-slate-800 mb-4">Simulare noua</h3>
             <div className="space-y-3">
               <div>
@@ -674,17 +723,97 @@ function SimulationsTab() {
                 <label className="text-xs text-slate-500 mb-1 block">Descriere</label>
                 <textarea className="input" rows={2} value={simForm.description} onChange={e => setSimForm({ ...simForm, description: e.target.value })} />
               </div>
+
+              {/* Masini dezactivate */}
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Parametri scenariu (JSON)</label>
-                <textarea className="input font-mono text-xs" rows={4} placeholder='{"capacity_factor": 1.2, "priority": "deadline"}' value={simForm.scenario_params} onChange={e => setSimForm({ ...simForm, scenario_params: e.target.value })} />
+                <label className="text-xs text-slate-500 mb-2 block">Masini dezactivate</label>
+                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
+                  {machinesList.map(m => (
+                    <label key={m.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-slate-50 px-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={simForm.disabled_machines.includes(m.id)}
+                        onChange={e => {
+                          const checked = e.target.checked
+                          setSimForm(f => ({
+                            ...f,
+                            disabled_machines: checked
+                              ? [...f.disabled_machines, m.id]
+                              : f.disabled_machines.filter(id => id !== m.id)
+                          }))
+                        }}
+                        className="rounded border-slate-300 text-blue-600"
+                      />
+                      <span className="text-slate-700">{m.code} - {m.name}</span>
+                    </label>
+                  ))}
+                  {machinesList.length === 0 && <p className="text-xs text-slate-400">Nicio masina disponibila.</p>}
+                </div>
+              </div>
+
+              {/* Comenzi urgente */}
+              <div>
+                <label className="text-xs text-slate-500 mb-2 block">Comenzi urgente</label>
+                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
+                  {workOrdersList.map(wo => (
+                    <label key={wo.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-slate-50 px-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={simForm.urgent_orders.includes(wo.id)}
+                        onChange={e => {
+                          const checked = e.target.checked
+                          setSimForm(f => ({
+                            ...f,
+                            urgent_orders: checked
+                              ? [...f.urgent_orders, wo.id]
+                              : f.urgent_orders.filter(id => id !== wo.id)
+                          }))
+                        }}
+                        className="rounded border-slate-300 text-blue-600"
+                      />
+                      <span className="text-slate-700">{wo.work_order_number} - {wo.product_name || wo.product_reference || ''}</span>
+                    </label>
+                  ))}
+                  {workOrdersList.length === 0 && <p className="text-xs text-slate-400">Nicio comanda disponibila.</p>}
+                </div>
+              </div>
+
+              {/* Overtime */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={simForm.allow_overtime}
+                  onChange={e => setSimForm({ ...simForm, allow_overtime: e.target.checked })}
+                  className="rounded border-slate-300 text-blue-600"
+                />
+                <span className="text-sm text-slate-700">Overtime permis</span>
+              </label>
+
+              {/* Perioada */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Perioada de la</label>
+                  <input type="date" className="input" value={simForm.period_from} onChange={e => setSimForm({ ...simForm, period_from: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Perioada pana la</label>
+                  <input type="date" className="input" value={simForm.period_to} onChange={e => setSimForm({ ...simForm, period_to: e.target.value })} />
+                </div>
               </div>
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setShowCreate(false)} className="btn-secondary">Anuleaza</button>
               <button onClick={() => {
-                const payload = { ...simForm }
-                if (simForm.scenario_params) {
-                  try { payload.scenario_params = JSON.parse(simForm.scenario_params) } catch { /* send as string */ }
+                const payload = {
+                  name: simForm.name,
+                  description: simForm.description,
+                  scenario_params: {
+                    disabled_machines: simForm.disabled_machines,
+                    urgent_orders: simForm.urgent_orders,
+                    allow_overtime: simForm.allow_overtime,
+                    period_from: simForm.period_from || undefined,
+                    period_to: simForm.period_to || undefined,
+                  },
                 }
                 createMut.mutate(payload)
               }} disabled={!simForm.name || createMut.isPending} className="btn-primary">
@@ -701,6 +830,24 @@ function SimulationsTab() {
   )
 }
 
+const PARAM_LABELS = {
+  disabled_machines: 'Masini dezactivate',
+  urgent_orders: 'Comenzi urgente',
+  allow_overtime: 'Overtime permis',
+  period_from: 'Perioada de la',
+  period_to: 'Perioada pana la',
+  capacity_factor: 'Factor capacitate',
+  priority: 'Prioritate',
+}
+
+function formatParamValue(key, val) {
+  if (val === true) return 'Da'
+  if (val === false) return 'Nu'
+  if (Array.isArray(val)) return val.length > 0 ? val.join(', ') : 'Niciunul'
+  if (val === null || val === undefined || val === '') return '-'
+  return String(val)
+}
+
 function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }) {
   const { data: detail } = useQuery({
     queryKey: ['scheduling-simulation', sim.id],
@@ -713,6 +860,9 @@ function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }
   })
 
   const sd = detail || sim
+  const params = sd.scenario_params
+    ? (typeof sd.scenario_params === 'string' ? (() => { try { return JSON.parse(sd.scenario_params) } catch { return null } })() : sd.scenario_params)
+    : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -725,10 +875,17 @@ function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }
         <div className="p-6 overflow-auto flex-1 space-y-4">
           <div className="text-sm text-slate-600">{sd.description || 'Fara descriere'}</div>
 
-          {sd.scenario_params && (
+          {params && typeof params === 'object' && (
             <div>
-              <div className="text-xs text-slate-500 font-medium mb-1">Parametri scenariu</div>
-              <pre className="bg-slate-50 rounded-lg p-3 text-xs text-slate-700 overflow-auto">{typeof sd.scenario_params === 'string' ? sd.scenario_params : JSON.stringify(sd.scenario_params, null, 2)}</pre>
+              <div className="text-xs text-slate-500 font-medium mb-2">Parametri scenariu</div>
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(params).map(([key, val]) => (
+                  <div key={key} className="bg-slate-50 rounded-lg p-3">
+                    <div className="text-xs text-slate-500">{PARAM_LABELS[key] || key}</div>
+                    <div className="font-medium text-slate-800 text-sm">{formatParamValue(key, val)}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -738,8 +895,8 @@ function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }
               <div className="grid grid-cols-2 gap-3">
                 {Object.entries(comparison).map(([key, val]) => (
                   <div key={key} className="bg-slate-50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500">{key}</div>
-                    <div className="font-medium text-slate-800">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</div>
+                    <div className="text-xs text-slate-500">{PARAM_LABELS[key] || key}</div>
+                    <div className="font-medium text-slate-800 text-sm">{formatParamValue(key, val)}</div>
                   </div>
                 ))}
               </div>

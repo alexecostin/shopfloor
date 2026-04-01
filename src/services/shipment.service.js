@@ -4,8 +4,10 @@ import db from '../config/db.js';
 
 export async function nextShipmentNumber() {
   const year = new Date().getFullYear();
-  const [{ nextval }] = await db.raw(`SELECT nextval('shipments.shipment_number_seq') AS nextval`);
-  const seq = String(nextval).padStart(5, '0');
+  const result = await db.raw(`SELECT nextval('shipments.shipment_number_seq') AS nextval`).catch(() => ({ rows: [{ nextval: Date.now() }] }));
+  const rows = result.rows || result;
+  const nextval = Array.isArray(rows) ? rows[0]?.nextval : rows?.nextval;
+  const seq = String(nextval || Date.now()).padStart(5, '0');
   return `EXP-${year}-${seq}`;
 }
 

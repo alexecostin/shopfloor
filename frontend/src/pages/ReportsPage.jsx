@@ -53,7 +53,8 @@ function SavedReports({ onLoad }) {
 
   const [name, setName] = useState('')
   const [saveType, setSaveType] = useState('')
-  const [saveParams, setSaveParams] = useState('')
+  const [paramDateFrom, setParamDateFrom] = useState('')
+  const [paramDateTo, setParamDateTo] = useState('')
 
   const saveMut = useMutation({
     mutationFn: (body) => api.post('/reports/saved', body),
@@ -66,6 +67,17 @@ function SavedReports({ onLoad }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['saved-reports'] }); toast.success('Raport sters.') },
     onError: () => toast.error('Eroare la stergere.'),
   })
+
+  function formatParamsDisplay(params) {
+    if (!params || typeof params !== 'object') return '-'
+    const parts = []
+    if (params.dateFrom) parts.push(`De la: ${params.dateFrom}`)
+    if (params.dateTo) parts.push(`Pana la: ${params.dateTo}`)
+    if (parts.length === 0) {
+      return Object.entries(params).map(([k, v]) => `${k}: ${v}`).join(', ') || '-'
+    }
+    return parts.join(' | ')
+  }
 
   if (isLoading) return <p className="text-slate-400">Se incarca...</p>
 
@@ -89,13 +101,18 @@ function SavedReports({ onLoad }) {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-500 block mb-1">Parametri (JSON)</label>
-          <input className="input w-56" value={saveParams} onChange={e => setSaveParams(e.target.value)} placeholder='{"dateFrom":"2026-01-01"}' />
+          <label className="text-xs text-slate-500 block mb-1">De la</label>
+          <input type="date" className="input w-40" value={paramDateFrom} onChange={e => setParamDateFrom(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Pana la</label>
+          <input type="date" className="input w-40" value={paramDateTo} onChange={e => setParamDateTo(e.target.value)} />
         </div>
         <button
           onClick={() => {
-            let params = {}
-            try { params = saveParams ? JSON.parse(saveParams) : {} } catch { toast.error('JSON invalid.'); return }
+            const params = {}
+            if (paramDateFrom) params.dateFrom = paramDateFrom
+            if (paramDateTo) params.dateTo = paramDateTo
             saveMut.mutate({ name, type: saveType, params })
           }}
           disabled={saveMut.isPending || !name || !saveType}
@@ -120,8 +137,8 @@ function SavedReports({ onLoad }) {
               {reports.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{r.type || '—'}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs font-mono">{r.params ? JSON.stringify(r.params) : '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{r.type || '-'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">{formatParamsDisplay(r.params)}</td>
                   <td className="px-4 py-3 text-center space-x-2">
                     <button onClick={() => onLoad && onLoad(r)} className="text-xs text-blue-600 hover:underline">Incarca</button>
                     <button onClick={() => { if (window.confirm('Stergi raportul salvat?')) deleteMut.mutate(r.id) }} className="text-xs text-red-500 hover:text-red-700 inline-flex items-center gap-0.5">

@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Calendar, ChevronRight, Trash2, Pencil, Search, BarChart3, PlayCircle, XCircle, ArrowLeft, ArrowRight, Check, AlertTriangle, Info, Loader2 } from 'lucide-react'
+import { Plus, Calendar, ChevronRight, Trash2, Pencil, Search, BarChart3, PlayCircle, XCircle, ArrowLeft, ArrowRight, Check, AlertTriangle, Info, Loader2, Calculator } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 
 const SHIFTS = ['Tura I', 'Tura II', 'Tura III']
 const STATUS_COLORS = {
@@ -1061,7 +1062,7 @@ export default function PlanningPage() {
       </div>
 
       <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
-        {[['plans', 'Planuri'], ['dashboard', 'Dashboard'], ['demands', 'Cereri'], ['capacity', 'Capacitate']].map(([t, l]) => (
+        {[['plans', 'Planuri'], ['dashboard', 'Dashboard'], ['demands', 'Cereri'], ['capacity', 'Capacitate'], ['ctp', 'CTP']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors
               ${tab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -1395,9 +1396,229 @@ export default function PlanningPage() {
         </div>
       )}
 
+      {tab === 'ctp' && <CTPTab />}
+
       {modal && <PlanModal onClose={() => setModal(false)} />}
       {selectedPlan && (
         <PlanDetail plan={selectedPlan} machines={machines} onClose={() => setSelectedPlan(null)} />
+      )}
+    </div>
+  )
+}
+
+// ─── CTP — Capable To Promise ───────────────────────────────────────────────
+
+function CTPTab() {
+  const [productId, setProductId] = useState(null)
+  const [productRef, setProductRef] = useState('')
+  const [quantity, setQuantity] = useState('')
+  const [maxShifts, setMaxShifts] = useState('2')
+  const [overtime, setOvertime] = useState('10')
+  const [result, setResult] = useState(null)
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.post('/planning/ctp', data).then(r => r.data),
+    onSuccess: (data) => setResult(data),
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la estimare.'),
+  })
+
+  // When a product is selected from SearchableSelect, store its reference
+  const { data: selectedProduct } = useQuery({
+    queryKey: ['bom-product', productId],
+    queryFn: () => api.get(`/bom/products/${productId}`).then(r => r.data),
+    enabled: !!productId,
+  })
+
+  useEffect(() => {
+    if (selectedProduct?.reference) setProductRef(selectedProduct.reference)
+  }, [selectedProduct])
+
+  function handleCalculate() {
+    if (!productRef || !quantity) return
+    mutation.mutate({
+      productReference: productRef,
+      quantity: Number(quantity),
+      maxShiftsPerDay: Number(maxShifts),
+      overtimePercent: Number(overtime),
+    })
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '—'
+    return new Date(dateStr).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+          <Calculator size={16} className="text-blue-500" /> CTP — Capable To Promise
+        </h3>
+        <p className="text-xs text-slate-400 mb-4">Estimeaza termenul de livrare pentru un produs si cantitate data.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Produs (referinta BOM) *</label>
+            <SearchableSelect
+              endpoint="/bom/products"
+              labelField="reference"
+              valueField="id"
+              placeholder="Cauta produs dupa referinta..."
+              value={productId}
+              onChange={(id) => setProductId(id)}
+              allowCreate={false}
+            />
+            {!productId && productRef === '' && (
+              <p className="text-xs text-slate-400 mt-1">Sau scrie direct referinta:</p>
+            )}
+            {!productId && (
+              <input
+                className="input mt-1"
+                placeholder="Referinta produs (ex: PROD-001)"
+                value={productRef}
+                onChange={e => setProductRef(e.target.value)}
+              />
+            )}
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Cantitate (buc) *</label>
+            <input
+              className="input"
+              type="number"
+              min="1"
+              placeholder="Ex: 500"
+              value={quantity}
+              onChange={e => setQuantity(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Max schimburi/zi</label>
+            <select className="input" value={maxShifts} onChange={e => setMaxShifts(e.target.value)}>
+              <option value="1">1 schimb</option>
+              <option value="2">2 schimburi</option>
+              <option value="3">3 schimburi</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Overtime permis (%)</label>
+            <input
+              type="number"
+              className="input"
+              min="0"
+              max="100"
+              step="0.5"
+              value={overtime}
+              onChange={e => setOvertime(e.target.value)}
+              placeholder="Ex: 7.5, 12, 20"
+            />
+            <p className="text-[10px] text-slate-400 mt-0.5">Procentul de ore suplimentare permise peste programul normal</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <button
+            onClick={handleCalculate}
+            disabled={mutation.isPending || !productRef || !quantity}
+            className="btn-primary flex items-center gap-2"
+          >
+            {mutation.isPending ? (
+              <><Loader2 size={14} className="animate-spin" /> Se calculeaza...</>
+            ) : (
+              <><Calculator size={14} /> Calculeaza</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Error result */}
+      {result && !result.canDeliver && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+          <div className="flex items-center gap-2 text-red-700 font-semibold mb-1">
+            <XCircle size={16} /> Nu se poate estima
+          </div>
+          <p className="text-sm text-red-600">{result.error}</p>
+        </div>
+      )}
+
+      {/* Success result */}
+      {result && result.canDeliver && (
+        <div className="space-y-4">
+          {/* Main result card */}
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-xl border border-green-200 p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Termen estimat</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">
+                  {formatDate(result.estimatedDate)}
+                  <span className="text-sm font-normal text-slate-500 ml-2">({result.workingDays} zile lucratoare)</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Produs</p>
+                <p className="text-sm font-semibold text-slate-700">{result.product?.reference}</p>
+                <p className="text-xs text-slate-400">{result.product?.name}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-400">Total ore productie</p>
+                <p className="text-lg font-bold text-slate-800">{result.totalProductionHours}h</p>
+              </div>
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-400">Ore disponibile/zi</p>
+                <p className="text-lg font-bold text-slate-800">{result.availableHoursPerDay}h</p>
+              </div>
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-400">Schimburi</p>
+                <p className="text-lg font-bold text-slate-800">{result.maxShifts} schimburi + {result.overtimePercent}% OT</p>
+              </div>
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-400">Cantitate</p>
+                <p className="text-lg font-bold text-slate-800">{result.quantity?.toLocaleString()} buc</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Load warning */}
+          {result.loadWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-2">
+              <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700">{result.loadWarning}</p>
+            </div>
+          )}
+
+          {/* Breakdown per operation */}
+          {result.breakdown?.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b">
+                <h4 className="font-medium text-slate-700">Detaliere pe operatii</h4>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium text-slate-600">Operatie</th>
+                    <th className="text-left px-4 py-2 font-medium text-slate-600">Tip masina</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Ciclu (s)</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Setup (min)</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Ore productie</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {result.breakdown.map((op, i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      <td className="px-4 py-2 font-medium text-slate-700">{op.operation}</td>
+                      <td className="px-4 py-2 text-slate-500">{op.machineType || '—'}</td>
+                      <td className="px-4 py-2 text-right text-slate-500">{op.cycleTimeSec}s</td>
+                      <td className="px-4 py-2 text-right text-slate-500">{op.setupMin}min</td>
+                      <td className="px-4 py-2 text-right font-bold text-blue-700">{op.productionHours}h</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

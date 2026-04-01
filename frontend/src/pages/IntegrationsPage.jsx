@@ -70,6 +70,21 @@ function HttpStatusBadge({ code }) {
 // TEMPLATE MODAL
 // ════════════════════════════════════════════════════════════════════════
 
+const TRANSFORM_OPTIONS = [
+  { value: 'none', label: 'Fara transformare' },
+  { value: 'uppercase', label: 'Majuscule' },
+  { value: 'lowercase', label: 'Minuscule' },
+  { value: 'date_ro', label: 'Data (RO)' },
+  { value: 'number', label: 'Numar' },
+  { value: 'trim', label: 'Trim spatii' },
+]
+
+function parseColumnConfig(cfg) {
+  if (Array.isArray(cfg)) return cfg
+  if (typeof cfg === 'string') { try { const p = JSON.parse(cfg); if (Array.isArray(p)) return p } catch { /* ignore */ } }
+  return []
+}
+
 function TemplateModal({ template, onClose }) {
   const qc = useQueryClient()
   const isEdit = !!template
@@ -80,11 +95,19 @@ function TemplateModal({ template, onClose }) {
     data_source: template?.data_source || 'receipts',
     file_format: template?.file_format || 'csv',
     delimiter: template?.delimiter || ',',
-    column_config: template?.column_config
-      ? (typeof template.column_config === 'string' ? template.column_config : JSON.stringify(template.column_config, null, 2))
-      : '[]',
   })
+  const [columns, setColumns] = useState(() => parseColumnConfig(template?.column_config))
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  function addColumn() {
+    setColumns(c => [...c, { sourceField: '', targetColumn: '', transform: 'none' }])
+  }
+  function removeColumn(idx) {
+    setColumns(c => c.filter((_, i) => i !== idx))
+  }
+  function updateColumn(idx, field, val) {
+    setColumns(c => c.map((col, i) => i === idx ? { ...col, [field]: val } : col))
+  }
 
   const mutation = useMutation({
     mutationFn: (data) => isEdit
@@ -106,13 +129,7 @@ function TemplateModal({ template, onClose }) {
 
   function submit() {
     if (!form.name.trim()) return toast.error('Numele este obligatoriu.')
-    let parsedConfig
-    try {
-      parsedConfig = JSON.parse(form.column_config)
-    } catch {
-      return toast.error('Configuratia coloanelor nu este un JSON valid.')
-    }
-    mutation.mutate({ ...form, column_config: parsedConfig })
+    mutation.mutate({ ...form, column_config: columns })
   }
 
   return (
@@ -160,14 +177,43 @@ function TemplateModal({ template, onClose }) {
             </div>
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Configuratie coloane (JSON)</label>
-            <textarea
-              className="input font-mono text-xs"
-              rows={6}
-              value={form.column_config}
-              onChange={f('column_config')}
-              placeholder='[{"sourceField":"name","targetColumn":"DENUMIRE","transform":"none"}]'
-            />
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-slate-500">Configuratie coloane</label>
+              <button type="button" onClick={addColumn} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                <Plus size={12} /> Adauga coloana
+              </button>
+            </div>
+            <div className="space-y-2">
+              {columns.map((col, idx) => (
+                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <input
+                    className="input flex-1 text-xs"
+                    placeholder="Camp sursa"
+                    value={col.sourceField || ''}
+                    onChange={e => updateColumn(idx, 'sourceField', e.target.value)}
+                  />
+                  <input
+                    className="input flex-1 text-xs"
+                    placeholder="Coloana tinta"
+                    value={col.targetColumn || ''}
+                    onChange={e => updateColumn(idx, 'targetColumn', e.target.value)}
+                  />
+                  <select
+                    className="input w-36 text-xs"
+                    value={col.transform || 'none'}
+                    onChange={e => updateColumn(idx, 'transform', e.target.value)}
+                  >
+                    {TRANSFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <button type="button" onClick={() => removeColumn(idx)} className="text-red-400 hover:text-red-600 shrink-0">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              {columns.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-2">Nicio coloana definita. Adaugati coloane.</p>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">

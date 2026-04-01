@@ -37,6 +37,9 @@ router.post('/demands/bulk', mgr, validate(v.bulkDemands), c.postBulkDemands);
 // Dashboard
 router.get('/dashboard', c.getDashboard);
 
+// CTP — Capable To Promise
+router.post('/ctp', c.postCTP);
+
 // Replan approval
 router.put('/replan/:id/approve', mgr, c.approveReplan);
 router.put('/replan/:id/reject', mgr, c.rejectReplan);

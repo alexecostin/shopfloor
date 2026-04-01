@@ -51,6 +51,11 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
   ];
   const constraints = config?.constraints || { respect_shifts: true, planning_granularity: 'shift' };
 
+  // Shift constraints
+  const maxShiftsPerDay = Number(constraints.max_shifts_per_day) || 2;
+  const overtimePercent = Number(constraints.overtime_percent) || 10;
+  const hoursPerShift = 7.5;
+
   // ─── 2. LOAD DATA ─────────────────────────────────────────────────────────
 
   // Active orders
@@ -161,8 +166,8 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
   }
 
   // Generate daily slots with available hours from shift config
-  // Group by machine: we'll look up hours per machine+date when allocating
-  const SHIFT_HOURS_FALLBACK = 8; // used if no shift config found
+  // Max daily hours per machine: shifts x hoursPerShift x (1 + overtime/100)
+  const SHIFT_HOURS_FALLBACK = maxShiftsPerDay * hoursPerShift * (1 + overtimePercent / 100);
 
   const slots = [];
   let cursor = new Date(periodStart);
@@ -176,7 +181,7 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
   for (const item of scored) {
     const productionHours = item.quantity / item.piecesPerHour;
     const setupHours = item.setupMinutes / 60;
-    const totalHours = productionHours + setupHours;
+    let remainingHours = productionHours + setupHours;
 
     // Find candidate machines
     let candidateMachines = [];
@@ -196,10 +201,17 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
       continue;
     }
 
-    // Find best slot
+    // Allocate across days — spill to next day when capacity exceeded
     let allocated = false;
-    for (const slot of slots) {
-      for (const machine of candidateMachines) {
+    let chosenMachine = null;
+
+    for (const machine of candidateMachines) {
+      let hoursLeft = remainingHours;
+      const tempOps = [];
+
+      for (const slot of slots) {
+        if (hoursLeft <= 0) break;
+
         // Check if machine has a confirmed planned_intervention on this date
         const maintenanceBlock = await db('maintenance.planned_interventions')
           .where({ machine_id: machine.id, status: 'confirmed' })
@@ -209,43 +221,56 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
           .catch(() => null);
         if (maintenanceBlock) continue; // skip this date for this machine
 
-        // Get available hours from shift config
+        // Get available hours from shift config, capped by shift constraints
         let dayAvailableHours = SHIFT_HOURS_FALLBACK;
         try {
           const shiftInfo = await shiftService.getAvailableHours(machine.id, slot.date);
-          if (shiftInfo.totalHours > 0) dayAvailableHours = shiftInfo.totalHours;
+          if (shiftInfo.totalHours > 0) {
+            // Cap the shift-reported hours by our constraint: maxShifts x hoursPerShift x (1+overtime)
+            dayAvailableHours = Math.min(shiftInfo.totalHours, SHIFT_HOURS_FALLBACK);
+          }
         } catch (_) { /* use fallback */ }
 
         const currentLoad = getMachineLoad(machine.id, slot.date, slot.shift);
-        if (currentLoad + totalHours <= dayAvailableHours) {
-          // Allocate here
-          const setupMinutes = item.setupMinutes;
-          const plannedHours = totalHours;
+        const freeHours = Math.max(0, dayAvailableHours - currentLoad);
+        if (freeHours <= 0) continue;
 
-          scheduledOps.push({
-            run_id: runId,
-            order_id: item.order.id,
-            operation_id: item.operation?.id || null,
-            machine_id: machine.id,
-            operator_id: null,
-            product_name: item.order.product_name,
-            product_code: item.order.product_code,
-            quantity: item.quantity,
-            planned_date: slot.date,
-            planned_shift: 'work',
-            sequence: item.operation?.sequence || 0,
-            setup_minutes: setupMinutes,
-            planned_hours: Math.round(plannedHours * 100) / 100,
-            status: 'planned',
-            dependency_met: true,
-          });
+        const hoursToAllocate = Math.min(hoursLeft, freeHours);
+        const qtyForSlot = remainingHours > 0
+          ? Math.round(item.quantity * (hoursToAllocate / (productionHours + setupHours)))
+          : item.quantity;
 
-          addMachineLoad(machine.id, slot.date, slot.shift, totalHours);
-          allocated = true;
-          break;
-        }
+        tempOps.push({
+          run_id: runId,
+          order_id: item.order.id,
+          operation_id: item.operation?.id || null,
+          machine_id: machine.id,
+          operator_id: null,
+          product_name: item.order.product_name,
+          product_code: item.order.product_code,
+          quantity: Math.max(1, qtyForSlot),
+          planned_date: slot.date,
+          planned_shift: 'work',
+          sequence: item.operation?.sequence || 0,
+          setup_minutes: tempOps.length === 0 ? item.setupMinutes : 0,
+          planned_hours: Math.round(hoursToAllocate * 100) / 100,
+          status: 'planned',
+          dependency_met: true,
+        });
+
+        hoursLeft -= hoursToAllocate;
       }
-      if (allocated) break;
+
+      if (hoursLeft <= 0) {
+        // Successfully allocated all hours on this machine
+        for (const op of tempOps) {
+          scheduledOps.push(op);
+          addMachineLoad(op.machine_id, op.planned_date, 'work', op.planned_hours);
+        }
+        allocated = true;
+        chosenMachine = machine;
+        break;
+      }
     }
 
     if (!allocated) {
@@ -254,10 +279,13 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
 
     // Check deadline warning
     if (allocated) {
-      const last = scheduledOps[scheduledOps.length - 1];
-      const lastDate = new Date(last.planned_date);
-      if (lastDate > item.deadline) {
-        warnings.push({ type: 'deadline_risk', message: `Comanda ${item.order.order_number}: planificata dupa deadline (${item.deadline.toISOString().split('T')[0]}).` });
+      const lastOps = scheduledOps.filter(op => op.order_id === item.order.id);
+      const last = lastOps[lastOps.length - 1];
+      if (last) {
+        const lastDate = new Date(last.planned_date);
+        if (lastDate > item.deadline) {
+          warnings.push({ type: 'deadline_risk', message: `Comanda ${item.order.order_number}: planificata dupa deadline (${item.deadline.toISOString().split('T')[0]}).` });
+        }
       }
     }
   }

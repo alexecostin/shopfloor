@@ -11,6 +11,7 @@ import {
   SortableContext, horizontalListSortingStrategy, useSortable, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import SearchableSelect from '../components/SearchableSelect'
 import {
   Plus, ChevronRight, Package, Trash2, X, Search,
   AlertTriangle, Check, ChevronDown, ChevronUp, Save, Settings2,
@@ -449,7 +450,7 @@ function VerificationsEditor({ items, onChange }) {
 // OPERATION DETAIL DRAWER (modal/side panel)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function OperationDetailDrawer({ operation, machines, onSaved, onClose, onDelete }) {
+function OperationDetailDrawer({ operation, machines, productId, onSaved, onClose, onDelete }) {
   const [form, setForm] = useState({
     operation_name: operation.operation_name || '',
     operation_type: operation.operation_type || '',
@@ -473,6 +474,36 @@ function OperationDetailDrawer({ operation, machines, onSaved, onClose, onDelete
     transfer_type: operation.transfer_type || '',
     description: operation.description || '',
   })
+
+  // BOM material linking state
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null)
+  const [qtyPerPiece, setQtyPerPiece] = useState(1)
+  const [wasteFactor, setWasteFactor] = useState(1.15)
+
+  const bomMaterialMut = useMutation({
+    mutationFn: (data) => api.post(`/bom/products/${productId}/materials`, data),
+    onSuccess: () => toast.success('Material BOM legat cu succes.'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la legare material BOM.'),
+  })
+
+  function handleInventoryItemSelect(id, item) {
+    setSelectedInventoryItem(item)
+    if (item) {
+      const specParts = [item.name, item.code, item.description].filter(Boolean)
+      setForm(prev => ({ ...prev, raw_material_spec: specParts.join(' - ') }))
+    }
+  }
+
+  function handleLinkBomMaterial() {
+    if (!selectedInventoryItem || !productId) return
+    bomMaterialMut.mutate({
+      materialName: selectedInventoryItem.name,
+      materialCode: selectedInventoryItem.code,
+      qtyPerPiece: Number(qtyPerPiece) || 1,
+      unit: selectedInventoryItem.unit || 'kg',
+      wasteFactor: Number(wasteFactor) || 1.15,
+    })
+  }
 
   const f = (k) => (e) => setForm(prev => ({ ...prev, [k]: e.target.value }))
 
@@ -590,6 +621,42 @@ function OperationDetailDrawer({ operation, machines, onSaved, onClose, onDelete
               )}
             </div>
           </div>
+
+          {/* Material from inventory + BOM linking */}
+          {productId && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
+              <label className="text-xs font-medium text-blue-700 block">Legare material din inventar (BOM)</label>
+              <SearchableSelect
+                endpoint="/inventory/items"
+                labelField="name"
+                valueField="id"
+                placeholder="Cauta material din inventar..."
+                value={selectedInventoryItem?.id || null}
+                onChange={handleInventoryItemSelect}
+                allowCreate={false}
+              />
+              {selectedInventoryItem && (
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-600 mb-1 block">Cantitate per piesa</label>
+                    <input className="input text-sm" type="number" step="any" min="0" value={qtyPerPiece} onChange={e => setQtyPerPiece(e.target.value)} />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-600 mb-1 block">Factor pierdere</label>
+                    <input className="input text-sm" type="number" step="0.01" min="1" value={wasteFactor} onChange={e => setWasteFactor(e.target.value)} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLinkBomMaterial}
+                    disabled={bomMaterialMut.isPending}
+                    className="btn-primary text-xs whitespace-nowrap"
+                  >
+                    {bomMaterialMut.isPending ? 'Se salveaza...' : 'Leaga material BOM'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Material + output */}
           <div className="grid grid-cols-2 gap-3">
@@ -1642,6 +1709,7 @@ function MBOMVisualEditor({ orderId, onBack }) {
         <OperationDetailDrawer
           operation={selectedOp}
           machines={machines}
+          productId={mbom?.product?.id}
           onSaved={() => { refetch(); setSelectedOp(null) }}
           onClose={() => setSelectedOp(null)}
           onDelete={(id) => deleteOpMut.mutate(id)}

@@ -58,17 +58,34 @@ async function recalculateCapacity(machineId, planDate, masterPlanId) {
     .sum('planned_hours as total');
 
   const plannedHours = Number(total) || 0;
-  let availableHours = 16; // fallback
+
+  // Load shift constraints from default scheduling config
+  let maxShiftsPerDay = 2;
+  let overtimePercent = 10;
+  const hoursPerShift = 7.5;
+  try {
+    const config = await db('planning.scheduling_configs').where('is_default', true).first();
+    if (config?.constraints) {
+      const c = typeof config.constraints === 'string' ? JSON.parse(config.constraints) : config.constraints;
+      if (c.max_shifts_per_day) maxShiftsPerDay = Number(c.max_shifts_per_day);
+      if (c.overtime_percent !== undefined) overtimePercent = Number(c.overtime_percent);
+    }
+  } catch (_) { /* keep defaults */ }
+
+  const constrainedMax = maxShiftsPerDay * hoursPerShift * (1 + overtimePercent / 100);
+
+  let availableHours = constrainedMax; // default based on shift constraints
   try {
     const { totalHours } = await shiftService.getAvailableHours(machineId, planDate);
-    if (totalHours > 0) availableHours = totalHours;
+    if (totalHours > 0) availableHours = Math.min(totalHours, constrainedMax);
   } catch (_) { /* keep fallback */ }
+
   const loadPercent = (plannedHours / availableHours) * 100;
 
   await db('planning.capacity_load')
     .insert({ machine_id: machineId, plan_date: planDate, available_hours: availableHours, planned_hours: plannedHours, load_percent: loadPercent, master_plan_id: masterPlanId, updated_at: new Date() })
     .onConflict(['machine_id', 'plan_date'])
-    .merge(['planned_hours', 'load_percent', 'master_plan_id', 'updated_at']);
+    .merge(['planned_hours', 'load_percent', 'available_hours', 'master_plan_id', 'updated_at']);
 }
 
 // ─── Allocations ──────────────────────────────────────────────────────────────

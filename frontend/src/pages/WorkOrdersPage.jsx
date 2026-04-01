@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, ChevronLeft, ChevronRight, ClipboardList, Euro, Clock, User, Pencil, Trash2, DollarSign, Rocket, CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Package } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, ClipboardList, Euro, Clock, User, Pencil, Trash2, DollarSign, Rocket, CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Package, FileText } from 'lucide-react'
 import { formatMoney, getRate, convertDisplay } from '../utils/currency'
 import SearchableSelect from '../components/SearchableSelect'
 
@@ -523,6 +523,12 @@ function WorkOrderDetail({ wo, users, onClose }) {
     queryFn: () => api.get(`/work-orders/${wo.id}/material-status`).then(r => r.data),
   })
 
+  // Measurement report
+  const { data: measReport } = useQuery({
+    queryKey: ['measurement-report', wo.id],
+    queryFn: () => api.get(`/quality/report/${wo.id}`).then(r => r.data),
+  })
+
   // Launch mutation
   const launchMutation = useMutation({
     mutationFn: () => api.post(`/work-orders/${wo.id}/launch`),
@@ -798,6 +804,75 @@ function WorkOrderDetail({ wo, users, onClose }) {
                   </tbody>
                 </table>
               </div>
+            )}
+          </div>
+
+          {/* Raport masurare */}
+          <div>
+            <h4 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+              <FileText size={14} className="text-teal-600" /> Raport masurare
+            </h4>
+            {measReport && measReport.totalMeasurements > 0 ? (
+              <div className="space-y-3">
+                {/* Overall status badge */}
+                <div className="flex items-center gap-3">
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-white ${
+                    measReport.overallStatus === 'CONFORMANT' ? 'bg-green-500' : 'bg-red-500'
+                  }`}>
+                    {measReport.overallStatus === 'CONFORMANT' ? 'CONFORMANT' : 'NON-CONFORMANT'}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {measReport.passedCount} / {measReport.totalMeasurements} masurari conforme
+                  </span>
+                </div>
+
+                {/* Measurements table */}
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 text-xs">Data</th>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 text-xs">Plan</th>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 text-xs">Tip</th>
+                        <th className="text-center px-3 py-2 font-medium text-slate-600 text-xs">Rezultat</th>
+                        <th className="text-left px-3 py-2 font-medium text-slate-600 text-xs">Detalii</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {measReport.measurements.map(m => {
+                        const plan = measReport.plans?.find(p => p.id === m.plan_id)
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 text-xs text-slate-500">
+                              {m.created_at ? new Date(m.created_at).toLocaleDateString('ro-RO') : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-600">{plan?.plan_name || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-slate-500">{m.measurement_type || '—'}</td>
+                            <td className="px-3 py-2 text-center">
+                              {m.overall_result === 'pass' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-green-600"><CheckCircle2 size={12} /> OK</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-red-600"><XCircle size={12} /> NOK</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-400">{m.notes || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Generate PDF button */}
+                <button
+                  onClick={() => toast('PDF in dezvoltare', { icon: '🔧' })}
+                  className="btn-secondary text-xs flex items-center gap-1"
+                >
+                  <FileText size={12} /> Genereaza PDF
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">Nicio masurare inregistrata pentru aceasta comanda.</p>
             )}
           </div>
 

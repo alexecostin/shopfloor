@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 
 export const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: process.env.RATE_LIMIT_GLOBAL || 1000,
   message: {
     statusCode: 429,
     error: 'PREA_MULTE_CERERI',
