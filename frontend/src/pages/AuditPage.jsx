@@ -47,34 +47,46 @@ function ActionsTab() {
           <span className="text-sm font-medium text-slate-600">Filtre</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select
-            value={actionType}
-            onChange={e => { setActionType(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            {ACTION_TYPES.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            placeholder="Tip entitate (ex: order)"
-            value={entityType}
-            onChange={e => { setEntityType(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => { setDateFrom(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => { setDateTo(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip actiune</label>
+            <select
+              value={actionType}
+              onChange={e => { setActionType(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {ACTION_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip entitate</label>
+            <input
+              type="text"
+              placeholder="Ex: order, machine"
+              value={entityType}
+              onChange={e => { setEntityType(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Data inceput</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Data sfarsit</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -188,25 +200,34 @@ function ChangesTab() {
           <span className="text-sm font-medium text-slate-600">Filtre</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input
-            type="text"
-            placeholder="Nume tabel (ex: machines)"
-            value={tableName}
-            onChange={e => { setTableName(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => { setDateFrom(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => { setDateTo(e.target.value); setPage(1); }}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nume tabel</label>
+            <input
+              type="text"
+              placeholder="Ex: machines, orders"
+              value={tableName}
+              onChange={e => { setTableName(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Data inceput</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Data sfarsit</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(1); }}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
         </div>
       </div>
 

@@ -556,44 +556,119 @@ export default function InventoryPage() {
 
       {tab === 'alerts' && alerts && (
         <div className="space-y-4">
-          {alerts.belowMin.length > 0 && (
+          {alerts.belowMin && alerts.belowMin.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-red-600 mb-2 flex items-center gap-2">
+              <h3 className="text-sm font-medium text-red-600 mb-3 flex items-center gap-2">
                 <AlertTriangle size={14} /> Sub stoc minim ({alerts.belowMin.length})
               </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {alerts.belowMin.map(item => {
+                  const currentQty = Number(item.current_qty || 0)
+                  const minStock = Number(item.min_stock || 0)
+                  const ratio = minStock > 0 ? currentQty / minStock : 0
+                  const isCritical = ratio < 0.25
+                  return (
+                    <div key={item.id} className={`rounded-xl border-2 p-4 ${isCritical ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-200'}`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <span className="font-semibold text-slate-800 text-sm">{item.name}</span>
+                          <span className="text-xs text-slate-400 ml-2">{item.code}</span>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isCritical ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>
+                          {isCritical ? 'CRITIC' : 'Atentie'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-xs text-slate-500">Stoc curent</p>
+                          <p className={`text-lg font-bold ${isCritical ? 'text-red-600' : 'text-amber-600'}`}>
+                            {currentQty.toLocaleString('ro-RO', { maximumFractionDigits: 2 })} {item.unit}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500">Minim necesar</p>
+                          <p className="text-sm font-medium text-slate-700">{minStock} {item.unit}</p>
+                        </div>
+                      </div>
+                      {item.cost_per_unit && (
+                        <p className="text-xs text-slate-400 mt-2">Cost unitar: {Number(item.cost_per_unit).toFixed(2)} EUR</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {(!alerts.belowMin || alerts.belowMin.length === 0) && <p className="text-slate-400 text-sm">Fara alerte de stoc minim.</p>}
+        </div>
+      )}
+
+      {tab === 'dashboard' && dashboard && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Package size={20} className="text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-blue-500 font-medium uppercase tracking-wide">Total articole</p>
+                  <p className="text-2xl font-bold text-blue-700">{dashboard.totalItems ?? 0}</p>
+                </div>
+              </div>
+              <p className="text-xs text-blue-400">Articole inregistrate in sistem</p>
+            </div>
+
+            <div className={`rounded-xl border-2 p-5 ${(dashboard.alertsCount || 0) > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${(dashboard.alertsCount || 0) > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
+                  <AlertTriangle size={20} className={(dashboard.alertsCount || 0) > 0 ? 'text-red-600' : 'text-green-600'} />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium uppercase tracking-wide ${(dashboard.alertsCount || 0) > 0 ? 'text-red-500' : 'text-green-500'}`}>Sub stoc minim</p>
+                  <p className={`text-2xl font-bold ${(dashboard.alertsCount || 0) > 0 ? 'text-red-600' : 'text-green-700'}`}>{dashboard.alertsCount ?? 0}</p>
+                </div>
+              </div>
+              <p className={`text-xs ${(dashboard.alertsCount || 0) > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {(dashboard.alertsCount || 0) > 0 ? 'Articole sub nivelul minim de stoc' : 'Nicio alerta activa'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <TrendingUp size={20} className="text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-500 font-medium uppercase tracking-wide">Valoare totala stoc</p>
+                  <p className="text-2xl font-bold text-emerald-700">
+                    {Number(dashboard.totalStockValue || 0).toLocaleString('ro-RO', { maximumFractionDigits: 0 })} EUR
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-emerald-400">Valoare estimata pe baza costului unitar</p>
+            </div>
+          </div>
+
+          {dashboard.recentMovements && dashboard.recentMovements.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3">Miscari recente ({dashboard.recentMovements.length})</h3>
               <div className="space-y-2">
-                {alerts.belowMin.map(item => (
-                  <div key={item.id} className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 flex items-center justify-between">
+                {dashboard.recentMovements.slice(0, 10).map((m, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-50 last:border-0">
                     <div>
-                      <span className="font-medium text-slate-800">{item.name}</span>
-                      <span className="text-xs text-slate-400 ml-2">{item.code}</span>
+                      <span className="font-medium text-slate-700">{m.item_name || m.name || '—'}</span>
+                      <span className="text-xs text-slate-400 ml-2">{m.movement_type || m.type || ''}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-red-500 font-bold">{Number(item.current_qty || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })}</span>
-                      <span className="text-slate-400 text-xs ml-1">/ min {item.min_stock} {item.unit}</span>
+                      <span className="font-medium text-slate-600">{m.qty || m.quantity || '—'}</span>
+                      {m.date && <span className="text-xs text-slate-400 ml-2">{new Date(m.date).toLocaleDateString('ro-RO')}</span>}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          {alerts.belowMin.length === 0 && <p className="text-slate-400 text-sm">Fara alerte de stoc minim.</p>}
-        </div>
-      )}
-
-      {tab === 'dashboard' && dashboard && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Total articole', value: dashboard.totalItems },
-            { label: 'Alerte stoc', value: dashboard.alertsCount, alert: dashboard.alertsCount > 0 },
-            { label: 'Valoare stoc', value: `${Number(dashboard.totalStockValue).toLocaleString('ro-RO', { maximumFractionDigits: 0 })} EUR` },
-            { label: 'Miscari recente', value: dashboard.recentMovements?.length || 0 },
-          ].map(({ label, value, alert }) => (
-            <div key={label} className={`rounded-xl border p-4 ${alert ? 'bg-red-50 border-red-100' : 'bg-white border-slate-200'}`}>
-              <p className="text-xs text-slate-400">{label}</p>
-              <p className={`text-xl font-bold mt-1 ${alert ? 'text-red-500' : 'text-slate-800'}`}>{value}</p>
-            </div>
-          ))}
         </div>
       )}
 

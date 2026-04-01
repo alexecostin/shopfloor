@@ -38,25 +38,49 @@ function MachineSetupTab() {
   const setDefaultMut = useMutation({
     mutationFn: time => api.post(`/setup/machines/${machineId}/default`, { default_setup_time: Number(time) }),
     onSuccess: () => { qc.invalidateQueries(['setup-machine', machineId]); setEditDefault(false); toast.success('Timp implicit salvat.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const createOverrideMut = useMutation({
     mutationFn: data => api.post(`/setup/machines/${machineId}/overrides`, data),
     onSuccess: () => { qc.invalidateQueries(['setup-overrides', machineId]); closeOverrideForm(); toast.success('Override creat.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const updateOverrideMut = useMutation({
     mutationFn: ({ id, ...data }) => api.put(`/setup/overrides/${id}`, data),
     onSuccess: () => { qc.invalidateQueries(['setup-overrides', machineId]); closeOverrideForm(); toast.success('Override actualizat.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteOverrideMut = useMutation({
     mutationFn: id => api.delete(`/setup/overrides/${id}`),
     onSuccess: () => { qc.invalidateQueries(['setup-overrides', machineId]); toast.success('Sters.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const { data: calcResult, isFetching: calcLoading } = useQuery({
@@ -80,14 +104,16 @@ function MachineSetupTab() {
   return (
     <div className="space-y-6">
       {/* Machine selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-slate-600 font-medium">Masina:</span>
-        <select className="input w-64" value={machineId} onChange={e => { setMachineId(e.target.value); setEditDefault(false) }}>
-          <option value="">Selecteaza masina...</option>
+      <div className="flex items-end gap-3 flex-wrap">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Masina *</label>
+          <select className="input w-64" value={machineId} onChange={e => { setMachineId(e.target.value); setEditDefault(false) }}>
+            <option value="">Selecteaza masina...</option>
           {(Array.isArray(machines) ? machines : []).map(m => (
             <option key={m.id} value={m.id}>{m.code || m.name} — {m.name || m.code}</option>
           ))}
-        </select>
+          </select>
+        </div>
       </div>
 
       {!machineId && <div className="text-slate-400 text-sm py-8 text-center">Selecteaza o masina pentru a gestiona timpii de setup.</div>}
@@ -144,7 +170,7 @@ function MachineSetupTab() {
                       <td className="px-4 py-3 font-medium text-slate-700">{ov.setup_time} min</td>
                       <td className="px-4 py-3 text-right flex gap-2 justify-end">
                         <button onClick={() => openEditOverride(ov)} className="text-slate-400 hover:text-blue-500"><Edit2 size={14} /></button>
-                        <button onClick={() => { if (confirm('Stergi override-ul?')) deleteOverrideMut.mutate(ov.id) }} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button>
+                        <button onClick={() => { if (confirm('Sigur doriti sa stergeti? Aceasta actiune este ireversibila.')) deleteOverrideMut.mutate(ov.id) }} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   ))}
@@ -223,13 +249,25 @@ function FactorsTab() {
   const createMut = useMutation({
     mutationFn: data => api.post('/setup/factors', data),
     onSuccess: () => { qc.invalidateQueries(['setup-factors']); closeForm(); toast.success('Factor creat.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...data }) => api.put(`/setup/factors/${id}`, data),
     onSuccess: () => { qc.invalidateQueries(['setup-factors']); closeForm(); toast.success('Factor actualizat.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function closeForm() { setShowForm(false); setEditing(null); setForm({ name: '', multiplier: 1, description: '' }) }

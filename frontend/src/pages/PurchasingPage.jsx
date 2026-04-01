@@ -33,7 +33,12 @@ function CreatePOModal({ onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/purchasing/orders', data),
     onSuccess: () => { qc.invalidateQueries(['purchasing-orders']); toast.success('Comanda de achizitie creata cu succes.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la crearea comenzii de achizitie.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta comanda exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'Eroare la crearea comenzii de achizitie. Incercati din nou.');
+    },
   })
 
   return (
@@ -96,7 +101,13 @@ function LineModal({ poId, editLine, onClose }) {
       ? api.put(`/purchasing/orders/lines/${editLine.id}`, data)
       : api.post(`/purchasing/orders/${poId}/lines`, data),
     onSuccess: () => { qc.invalidateQueries(['purchasing-po', poId]); toast.success(isEdit ? 'Linie actualizata.' : 'Linie adaugata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -168,7 +179,13 @@ function ReceiptModal({ po, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post(`/purchasing/orders/${po.id}/receive`, data),
     onSuccess: () => { qc.invalidateQueries(['purchasing-po', po.id]); qc.invalidateQueries(['purchasing-orders']); toast.success('Receptie inregistrata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const validReceipts = receipts.filter(r => Number(r.receivedQty) > 0)
@@ -235,25 +252,49 @@ function PODetailModal({ poId, onClose }) {
   const sendMut = useMutation({
     mutationFn: () => api.post(`/purchasing/orders/${poId}/send`),
     onSuccess: () => { qc.invalidateQueries(['purchasing-po', poId]); qc.invalidateQueries(['purchasing-orders']); toast.success('PO trimis.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const confirmMut = useMutation({
     mutationFn: (data) => api.put(`/purchasing/orders/${poId}/confirm`, data),
     onSuccess: () => { qc.invalidateQueries(['purchasing-po', poId]); qc.invalidateQueries(['purchasing-orders']); toast.success('PO confirmat.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const cancelMut = useMutation({
     mutationFn: () => api.put(`/purchasing/orders/${poId}/cancel`),
     onSuccess: () => { qc.invalidateQueries(['purchasing-po', poId]); qc.invalidateQueries(['purchasing-orders']); toast.success('PO anulat.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteLineMut = useMutation({
     mutationFn: (lineId) => api.delete(`/purchasing/orders/lines/${lineId}`),
     onSuccess: () => { qc.invalidateQueries(['purchasing-po', poId]); toast.success('Linie stearsa.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   if (isLoading || !po) {
@@ -532,7 +573,13 @@ function DeficitTab() {
   const generateMut = useMutation({
     mutationFn: (data) => api.post('/purchasing/orders', data),
     onSuccess: () => { qc.invalidateQueries(['purchasing-orders']); qc.invalidateQueries(['purchasing-deficit']); toast.success('PO generat din necesar.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function handleGenerate(group) {

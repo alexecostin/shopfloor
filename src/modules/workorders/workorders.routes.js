@@ -21,6 +21,16 @@ router.put('/:id/status', mgr, c.changeStatus);
 // Operations pe comanda de lucru
 router.put('/operations/:id', mgr, c.updateOperation);
 
+// Technical Checks
+router.get('/:id/technical-checks', c.getTechnicalChecks);
+router.put('/technical-checks/:checkId', mgr, c.updateTechnicalCheck);
+
+// Material Status
+router.get('/:id/material-status', c.getMaterialStatus);
+
+// Launch to Production
+router.post('/:id/launch', mgr, c.launchToProduction);
+
 // HR Allocations
 router.get('/:id/cost', c.getWorkOrderCost);
 router.post('/:id/hr', mgr, c.addHrAllocation);

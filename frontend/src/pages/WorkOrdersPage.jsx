@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, ChevronLeft, ChevronRight, ClipboardList, Euro, Clock, User, Pencil, Trash2, DollarSign } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, ClipboardList, Euro, Clock, User, Pencil, Trash2, DollarSign, Rocket, CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Package } from 'lucide-react'
 import { formatMoney, getRate, convertDisplay } from '../utils/currency'
 import SearchableSelect from '../components/SearchableSelect'
 
@@ -483,9 +483,11 @@ function HrRatesSection() {
 
 function WorkOrderDetail({ wo, users, onClose }) {
   const qc = useQueryClient()
+  const { user: currentUser } = useAuth()
   const [addHr, setAddHr] = useState(false)
   const [hrForm, setHrForm] = useState({ userId: '', allocatedHours: '', notes: '' })
   const [editModal, setEditModal] = useState(false)
+  const [launchConfirm, setLaunchConfirm] = useState(false)
 
   const deleteHr = useMutation({
     mutationFn: (hrId) => api.delete(`/work-orders/hr/${hrId}`),
@@ -502,6 +504,41 @@ function WorkOrderDetail({ wo, users, onClose }) {
     queryKey: ['work-order-cost', wo.id],
     queryFn: () => api.get(`/work-orders/${wo.id}/cost`).then(r => r.data),
   })
+
+  // Technical checks
+  const { data: techChecks = [] } = useQuery({
+    queryKey: ['technical-checks', wo.id],
+    queryFn: () => api.get(`/work-orders/${wo.id}/technical-checks`).then(r => r.data),
+  })
+
+  const updateCheck = useMutation({
+    mutationFn: ({ checkId, isPassed, notes }) => api.put(`/work-orders/technical-checks/${checkId}`, { isPassed, notes }),
+    onSuccess: () => { qc.invalidateQueries(['technical-checks', wo.id]); toast.success('Verificare actualizata.') },
+    onError: () => toast.error('Eroare la actualizarea verificarii.'),
+  })
+
+  // Material status
+  const { data: materialStatus = [] } = useQuery({
+    queryKey: ['material-status', wo.id],
+    queryFn: () => api.get(`/work-orders/${wo.id}/material-status`).then(r => r.data),
+  })
+
+  // Launch mutation
+  const launchMutation = useMutation({
+    mutationFn: () => api.post(`/work-orders/${wo.id}/launch`),
+    onSuccess: () => {
+      qc.invalidateQueries(['work-orders'])
+      qc.invalidateQueries(['work-order', wo.id])
+      toast.success('Comanda a fost lansata in productie!')
+      setLaunchConfirm(false)
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la lansarea in productie.'),
+  })
+
+  const allChecksPassed = techChecks.length > 0 && techChecks.every(c => c.is_passed)
+  const noMissingMaterials = materialStatus.length === 0 || materialStatus.every(m => m.status !== 'missing')
+  const canLaunch = allChecksPassed && noMissingMaterials && wo.status !== 'released' && wo.status !== 'in_progress' && wo.status !== 'completed'
 
   const updateOp = useMutation({
     mutationFn: ({ id, data }) => api.put(`/work-orders/operations/${id}`, data),
@@ -677,6 +714,133 @@ function WorkOrderDetail({ wo, users, onClose }) {
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Verificare Tehnica */}
+          <div>
+            <h4 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+              <ShieldCheck size={14} className="text-indigo-600" /> Verificare Tehnica
+              {allChecksPassed && <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">Complet</span>}
+            </h4>
+            <div className="space-y-2">
+              {techChecks.map(check => (
+                <div key={check.id} className={`flex items-start gap-3 rounded-lg p-3 border ${check.is_passed ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
+                  <input
+                    type="checkbox"
+                    checked={!!check.is_passed}
+                    onChange={e => updateCheck.mutate({ checkId: check.id, isPassed: e.target.checked, notes: check.notes || '' })}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${check.is_passed ? 'text-green-700 line-through' : 'text-slate-700'}`}>{check.check_item}</p>
+                    <input
+                      className="mt-1 w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white placeholder-slate-300"
+                      placeholder="Note / observatii..."
+                      defaultValue={check.notes || ''}
+                      onBlur={e => {
+                        if (e.target.value !== (check.notes || '')) {
+                          updateCheck.mutate({ checkId: check.id, isPassed: check.is_passed, notes: e.target.value })
+                        }
+                      }}
+                    />
+                  </div>
+                  {check.is_passed
+                    ? <CheckCircle2 size={16} className="text-green-500 flex-shrink-0 mt-0.5" />
+                    : <XCircle size={16} className="text-slate-300 flex-shrink-0 mt-0.5" />
+                  }
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Status materiale */}
+          <div>
+            <h4 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+              <Package size={14} className="text-amber-600" /> Status materiale
+            </h4>
+            {materialStatus.length === 0 ? (
+              <p className="text-xs text-slate-400">Niciun material definit in BOM sau produsul nu este asociat.</p>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-slate-600 text-xs">Material</th>
+                      <th className="text-right px-3 py-2 font-medium text-slate-600 text-xs">Necesar</th>
+                      <th className="text-right px-3 py-2 font-medium text-slate-600 text-xs">In stoc</th>
+                      <th className="text-center px-3 py-2 font-medium text-slate-600 text-xs">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {materialStatus.map((mat, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-slate-700 text-xs">{mat.materialName}</div>
+                          {mat.materialCode && <div className="text-[10px] text-slate-400">{mat.materialCode}</div>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs font-medium">{mat.qtyNeeded} {mat.unit || ''}</td>
+                        <td className="px-3 py-2 text-right text-xs font-medium">{mat.qtyAvailable} {mat.unit || ''}</td>
+                        <td className="px-3 py-2 text-center">
+                          {mat.status === 'available' && (
+                            <span className="inline-flex items-center gap-1 text-xs text-green-600"><CheckCircle2 size={12} /> Disponibil</span>
+                          )}
+                          {mat.status === 'partial' && (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600"><AlertTriangle size={12} /> Partial</span>
+                          )}
+                          {mat.status === 'missing' && (
+                            <span className="inline-flex items-center gap-1 text-xs text-red-600"><XCircle size={12} /> Lipsa</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Lanseaza in productie */}
+          {canLaunch && (
+            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-4 border border-indigo-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-indigo-800 flex items-center gap-2">
+                    <Rocket size={14} /> Lansare in productie
+                  </h4>
+                  <p className="text-xs text-indigo-600 mt-1">Toate verificarile tehnice sunt complete.</p>
+                </div>
+                <button
+                  onClick={() => setLaunchConfirm(true)}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                >
+                  <Rocket size={14} /> Lanseaza in productie
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Launch confirmation dialog */}
+          {launchConfirm && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+                <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                  <Rocket size={16} className="text-indigo-600" /> Confirmare lansare
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Comanda va fi trimisa in productie. Operatorii vor fi notificati.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setLaunchConfirm(false)} className="btn-secondary text-sm">Anuleaza</button>
+                  <button
+                    onClick={() => launchMutation.mutate()}
+                    disabled={launchMutation.isPending}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {launchMutation.isPending ? 'Se lanseaza...' : 'Confirma lansarea'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

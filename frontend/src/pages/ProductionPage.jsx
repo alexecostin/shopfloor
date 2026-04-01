@@ -26,7 +26,13 @@ function ReportModal({ machines, orders, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/production/reports', data),
     onSuccess: () => { qc.invalidateQueries(['reports']); toast.success('Raport inregistrat.'); hapticSuccess(); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -34,17 +40,27 @@ function ReportModal({ machines, orders, onClose }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-screen overflow-y-auto">
         <h3 className="font-semibold text-slate-800 mb-4">Raporteaza productie</h3>
         <div className="space-y-3">
-          <select className="input" value={form.machineId} onChange={e => setForm({ ...form, machineId: e.target.value })}>
-            <option value="">Selecteaza utilaj</option>
-            {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-          </select>
-          <select className="input" value={form.orderId} onChange={e => setForm({ ...form, orderId: e.target.value })}>
-            <option value="">Fara comanda (optional)</option>
-            {orders?.filter(o => o.status === 'active').map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.product_name}</option>)}
-          </select>
-          <select className="input" value={form.shift} onChange={e => setForm({ ...form, shift: e.target.value })}>
-            {SHIFTS.map(s => <option key={s}>{s}</option>)}
-          </select>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Utilaj *</label>
+            <select className="input" value={form.machineId} onChange={e => setForm({ ...form, machineId: e.target.value })}>
+              <option value="">Selecteaza utilaj</option>
+              {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Comanda asociata</label>
+            <select className="input" value={form.orderId} onChange={e => setForm({ ...form, orderId: e.target.value })}>
+              <option value="">Fara comanda (optional)</option>
+              {orders?.filter(o => o.status === 'active').map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.product_name}</option>)}
+            </select>
+            <p className="text-[11px] text-slate-400 mt-0.5">Selecteaza comanda activa pentru a lega raportul de o comanda de productie</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tura *</label>
+            <select className="input" value={form.shift} onChange={e => setForm({ ...form, shift: e.target.value })}>
+              {SHIFTS.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500">Piese bune</label>
@@ -56,16 +72,26 @@ function ReportModal({ machines, orders, onClose }) {
             </div>
           </div>
           {form.scrapPieces > 0 && (
-            <LookupSelect lookupType="scrap_reasons" value={form.scrapReasonCode || form.scrapReason} onChange={v => setForm({ ...form, scrapReasonCode: v, scrapReason: v })} placeholder="Motiv rebuturi" />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Motiv rebuturi *</label>
+              <LookupSelect lookupType="scrap_reasons" value={form.scrapReasonCode || form.scrapReason} onChange={v => setForm({ ...form, scrapReasonCode: v, scrapReason: v })} placeholder="Motiv rebuturi" />
+              <p className="text-[11px] text-slate-400 mt-0.5">Selecteaza motivul principal al rebuturilor</p>
+            </div>
           )}
           <div>
-            <label className="text-xs text-slate-500">Piese reprelucrare</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Piese reprelucrare</label>
             <input type="number" min={0} className="input" value={form.reworkPieces} onChange={e => setForm({ ...form, reworkPieces: +e.target.value })} />
           </div>
           {form.reworkPieces > 0 && (
-            <LookupSelect lookupType="rework_reasons" value={form.reworkReasonCode} onChange={v => setForm({ ...form, reworkReasonCode: v })} placeholder="Motiv reprelucrare" />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Motiv reprelucrare *</label>
+              <LookupSelect lookupType="rework_reasons" value={form.reworkReasonCode} onChange={v => setForm({ ...form, reworkReasonCode: v })} placeholder="Motiv reprelucrare" />
+            </div>
           )}
-          <textarea className="input resize-none" rows={2} placeholder="Observatii (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Observatii</label>
+            <textarea className="input resize-none" rows={2} placeholder="Observatii (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -85,7 +111,12 @@ function StopModal({ machines, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/production/stops', data),
     onSuccess: () => { qc.invalidateQueries(['stops']); toast.success('Oprire inregistrata.'); hapticSuccess(); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -93,15 +124,27 @@ function StopModal({ machines, onClose }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-red-600 mb-4">Inregistreaza oprire</h3>
         <div className="space-y-3">
-          <select className="input" value={form.machineId} onChange={e => setForm({ ...form, machineId: e.target.value })}>
-            <option value="">Selecteaza utilaj</option>
-            {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-          </select>
-          <input className="input" placeholder="Motiv oprire" value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} />
-          <LookupSelect lookupType="stop_categories" value={form.category} onChange={v => setForm({ ...form, category: v })} placeholder="Categorie oprire" />
-          <select className="input" value={form.shift} onChange={e => setForm({ ...form, shift: e.target.value })}>
-            {SHIFTS.map(s => <option key={s}>{s}</option>)}
-          </select>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Utilaj *</label>
+            <select className="input" value={form.machineId} onChange={e => setForm({ ...form, machineId: e.target.value })}>
+              <option value="">Selecteaza utilaj</option>
+              {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Motiv oprire *</label>
+            <input className="input" placeholder="Descrieti motivul opririi" value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Categorie oprire</label>
+            <LookupSelect lookupType="stop_categories" value={form.category} onChange={v => setForm({ ...form, category: v })} placeholder="Categorie oprire" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tura</label>
+            <select className="input" value={form.shift} onChange={e => setForm({ ...form, shift: e.target.value })}>
+              {SHIFTS.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -127,7 +170,13 @@ function NewOrderModal({ onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/production/orders', data),
     onSuccess: () => { qc.invalidateQueries(['orders']); toast.success('Comanda creata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -208,7 +257,13 @@ function EditOrderModal({ order, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.put(`/production/orders/${order.id}`, data),
     onSuccess: () => { qc.invalidateQueries(['orders']); qc.invalidateQueries(['order-detail', order.id]); toast.success('Comanda actualizata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -393,13 +448,25 @@ function ShiftsTab({ machines }) {
   const openShift = useMutation({
     mutationFn: (data) => api.post('/production/shifts', data),
     onSuccess: () => { qc.invalidateQueries(['shifts']); toast.success('Tura deschisa.'); setOpenModal(false) },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const closeShift = useMutation({
     mutationFn: ({ id, data }) => api.put(`/production/shifts/${id}`, data),
     onSuccess: () => { qc.invalidateQueries(['shifts']); toast.success('Tura inchisa.'); setCloseModal(null) },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const shiftList = shifts?.data || shifts || []
@@ -456,19 +523,28 @@ function ShiftsTab({ machines }) {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h3 className="font-semibold text-slate-800 mb-4">Deschide tura</h3>
             <div className="space-y-3">
-              <select className="input" value={openForm.machineId} onChange={e => setOpenForm({ ...openForm, machineId: e.target.value })}>
-                <option value="">Selecteaza utilaj *</option>
-                {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-              </select>
-              <select className="input" value={openForm.shift} onChange={e => setOpenForm({ ...openForm, shift: e.target.value })}>
-                <option value="Tura I">Tura I</option>
-                <option value="Tura II">Tura II</option>
-                <option value="Tura III">Tura III</option>
-              </select>
-              <select className="input" value={openForm.operatorId} onChange={e => setOpenForm({ ...openForm, operatorId: e.target.value })}>
-                <option value="">Selecteaza operator</option>
-                {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Utilaj *</label>
+                <select className="input" value={openForm.machineId} onChange={e => setOpenForm({ ...openForm, machineId: e.target.value })}>
+                  <option value="">Selecteaza utilaj</option>
+                  {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Tura *</label>
+                <select className="input" value={openForm.shift} onChange={e => setOpenForm({ ...openForm, shift: e.target.value })}>
+                  <option value="Tura I">Tura I</option>
+                  <option value="Tura II">Tura II</option>
+                  <option value="Tura III">Tura III</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Operator</label>
+                <select className="input" value={openForm.operatorId} onChange={e => setOpenForm({ ...openForm, operatorId: e.target.value })}>
+                  <option value="">Selecteaza operator</option>
+                  {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+              </div>
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setOpenModal(false)} className="btn-secondary">Anuleaza</button>
@@ -534,7 +610,13 @@ export default function ProductionPage() {
   const closeStop = useMutation({
     mutationFn: (id) => api.put(`/production/stops/${id}`, {}),
     onSuccess: () => { qc.invalidateQueries(['stops']); toast.success('Oprire inchisa.'); hapticSuccess() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -595,7 +677,7 @@ export default function ProductionPage() {
                   <td className="px-4 py-3 text-slate-400 hidden lg:table-cell text-xs">{new Date(r.reported_at).toLocaleString('ro-RO')}</td>
                 </tr>
               ))}
-              {reports?.data?.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Niciun raport.</td></tr>}
+              {reports?.data?.length === 0 && <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400"><Clock size={32} className="mx-auto text-slate-300 mb-2" /><p className="text-slate-500 font-medium">Niciun raport</p><p className="text-slate-400 text-sm mt-1">Apasa butonul "Raport" pentru a inregistra primul raport de productie.</p></td></tr>}
             </tbody>
           </table>
         </div>
@@ -634,7 +716,7 @@ export default function ProductionPage() {
                   )}
                 </tr>
               ))}
-              {stops?.data?.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nicio oprire.</td></tr>}
+              {stops?.data?.length === 0 && <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400"><StopCircle size={32} className="mx-auto text-slate-300 mb-2" /><p className="text-slate-500 font-medium">Nicio oprire</p><p className="text-slate-400 text-sm mt-1">Nu sunt opriri inregistrate. Inregistreaza o oprire folosind butonul "Oprire".</p></td></tr>}
             </tbody>
           </table>
         </div>
@@ -675,7 +757,7 @@ export default function ProductionPage() {
                   )}
                 </tr>
               ))}
-              {orders?.length === 0 && <tr><td colSpan={isManager ? 5 : 4} className="px-4 py-8 text-center text-slate-400">Nicio comanda.</td></tr>}
+              {orders?.length === 0 && <tr><td colSpan={isManager ? 5 : 4} className="px-4 py-12 text-center text-slate-400"><Plus size={32} className="mx-auto text-slate-300 mb-2" /><p className="text-slate-500 font-medium">Nicio comanda</p><p className="text-slate-400 text-sm mt-1">Apasa butonul "Comanda noua" pentru a adauga prima comanda de productie.</p></td></tr>}
             </tbody>
           </table>
         </div>

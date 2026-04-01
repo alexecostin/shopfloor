@@ -112,7 +112,12 @@ function LoturiTab() {
       setShowModal(false)
       qc.invalidateQueries({ queryKey: ['lots'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la creare lot'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Acest lot exista deja. Numarul de lot trebuie sa fie unic.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'Eroare la creare lot. Incercati din nou.');
+    },
   })
 
   const lots = data?.data || []

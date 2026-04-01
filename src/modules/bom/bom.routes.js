@@ -50,6 +50,14 @@ router.delete('/alternatives/:id', mgr, c.deleteAlternative);
 // Validate MBOM
 router.put('/products/:productId/validate', mgr, c.validateMBOM);
 
+// Copy MBOM from source product to target product
+router.post('/products/:targetId/copy-mbom-from/:sourceId', mgr, c.copyMBOM);
+
+// Operation Templates
+router.get('/operation-templates', c.getTemplates);
+router.post('/operation-templates', mgr, c.postTemplate);
+router.delete('/operation-templates/:id', adm, c.deleteTemplate);
+
 // Dependencies & Backward Scheduling
 router.get('/products/:productId/dependencies', c.getProductDependencies);
 router.post('/operations/:operationId/dependencies', mgr, c.addDependency);

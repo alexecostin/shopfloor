@@ -73,13 +73,13 @@ function CostElementsConfig() {
   const toggleMut = useMutation({
     mutationFn: (el) => api.put(`/costs/elements/${el.id}`, { ...el, active: !el.active }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cost-elements'] }); toast.success('Actualizat.') },
-    onError: () => toast.error('Eroare la actualizare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la actualizare. Incercati din nou.'); },
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, name, rate }) => api.put(`/costs/elements/${id}`, { name, rate }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cost-elements'] }); toast.success('Salvat.') },
-    onError: () => toast.error('Eroare la salvare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la salvare. Incercati din nou.'); },
   })
 
   const [editing, setEditing] = useState(null)
@@ -176,7 +176,7 @@ function MachineCostConfig() {
       depreciationRate: parseFloat(depreciationRate) || 0,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['machine-cost-config'] }); toast.success('Configuratie salvata.') },
-    onError: () => toast.error('Eroare la salvare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la salvare. Incercati din nou.'); },
   })
 
   const { data: allConfigs } = useQuery({
@@ -272,7 +272,7 @@ function OperatorCostConfig() {
       setRole('')
       setHourlyRate('')
     },
-    onError: () => toast.error('Eroare la salvare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la salvare. Incercati din nou.'); },
   })
 
   if (isLoading) return <p className="text-slate-400">Se incarca...</p>
@@ -337,19 +337,19 @@ function OverheadConfig() {
       toast.success('Adaugat.')
       setName(''); setType(''); setAmount(''); setAllocationMethod('')
     },
-    onError: () => toast.error('Eroare la adaugare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la adaugare. Incercati din nou.'); },
   })
 
   const updateMut = useMutation({
     mutationFn: (item) => api.put(`/costs/overhead/${item.id}`, item),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['overhead-costs'] }); toast.success('Actualizat.'); setEditing(null) },
-    onError: () => toast.error('Eroare la actualizare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la actualizare. Incercati din nou.'); },
   })
 
   const deleteMut = useMutation({
     mutationFn: (id) => api.delete(`/costs/overhead/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['overhead-costs'] }); toast.success('Sters.') },
-    onError: () => toast.error('Eroare la stergere.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.'); else toast.error(msg || 'Eroare la stergere. Incercati din nou.'); },
   })
 
   const [editData, setEditData] = useState({})
@@ -417,7 +417,7 @@ function OverheadConfig() {
                     ) : (
                       <>
                         <button onClick={() => startEdit(item)} className="text-xs text-slate-500 hover:text-blue-600">Editeaza</button>
-                        <button onClick={() => { if (window.confirm('Stergi?')) deleteMut.mutate(item.id) }} className="text-xs text-red-500 hover:text-red-700">Sterge</button>
+                        <button onClick={() => { if (window.confirm('Sigur doriti sa stergeti? Aceasta actiune este ireversibila.')) deleteMut.mutate(item.id) }} className="text-xs text-red-500 hover:text-red-700">Sterge</button>
                       </>
                     )}
                   </td>
@@ -667,7 +667,7 @@ export default function CostsPage() {
   const snapshotMut = useMutation({
     mutationFn: id => api.post(`/costs/snapshot/${id}`),
     onSuccess: () => toast.success('Snapshot salvat.'),
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la salvare snapshot. Incercati din nou.'); },
   })
 
   const orderList = orders?.data || orders || []
@@ -705,11 +705,14 @@ export default function CostsPage() {
 
       {tab === 'order' && (
         <div className="space-y-4">
-          <div className="flex gap-3 items-center flex-wrap">
-            <select className="input max-w-xs" value={orderId} onChange={e => setOrderId(e.target.value)}>
-              <option value="">Selecteaza comanda...</option>
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Comanda de productie</label>
+              <select className="input max-w-xs" value={orderId} onChange={e => setOrderId(e.target.value)}>
+                <option value="">Selecteaza comanda...</option>
               {orderList.map(o => <option key={o.id} value={o.id}>{o.order_number || o.name || `#${o.id}`}</option>)}
-            </select>
+              </select>
+            </div>
             {orderId && (
               <button onClick={() => snapshotMut.mutate(orderId)} disabled={snapshotMut.isPending} className="btn-secondary text-sm">
                 {snapshotMut.isPending ? 'Se salveaza...' : 'Salveaza Snapshot'}
@@ -766,9 +769,15 @@ export default function CostsPage() {
 
       {tab === 'machine' && (
         <div className="space-y-4">
-          <div className="flex gap-3 flex-wrap">
-            <input className="input w-40" type="date" value={machineFrom} onChange={e => setMachineFrom(e.target.value)} />
-            <input className="input w-40" type="date" value={machineTo} onChange={e => setMachineTo(e.target.value)} />
+          <div className="flex gap-3 flex-wrap items-end">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Data inceput *</label>
+              <input className="input w-40" type="date" value={machineFrom} onChange={e => setMachineFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Data sfarsit *</label>
+              <input className="input w-40" type="date" value={machineTo} onChange={e => setMachineTo(e.target.value)} />
+            </div>
           </div>
           {mcLoading ? <p className="text-slate-400">Se incarca...</p> : (machineFrom && machineTo) ? (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -804,9 +813,15 @@ export default function CostsPage() {
 
       {tab === 'operator' && (
         <div className="space-y-4">
-          <div className="flex gap-3 flex-wrap">
-            <input className="input w-40" type="date" value={opFrom} onChange={e => setOpFrom(e.target.value)} />
-            <input className="input w-40" type="date" value={opTo} onChange={e => setOpTo(e.target.value)} />
+          <div className="flex gap-3 flex-wrap items-end">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Data inceput *</label>
+              <input className="input w-40" type="date" value={opFrom} onChange={e => setOpFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Data sfarsit *</label>
+              <input className="input w-40" type="date" value={opTo} onChange={e => setOpTo(e.target.value)} />
+            </div>
           </div>
           {opLoading ? <p className="text-slate-400">Se incarca...</p> : (opFrom && opTo) ? (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

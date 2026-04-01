@@ -256,9 +256,24 @@ export default function ReportsPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [product, setProduct] = useState('')
+  const [machineId, setMachineId] = useState('')
   const [week, setWeek] = useState('')
   const [month, setMonth] = useState('')
   const [year, setYear] = useState(new Date().getFullYear().toString())
+
+  const { data: machinesRaw } = useQuery({
+    queryKey: ['machines-list'],
+    queryFn: () => api.get('/machines').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const machinesList = machinesRaw?.data || machinesRaw || []
+
+  const { data: productsRaw } = useQuery({
+    queryKey: ['products-list'],
+    queryFn: () => api.get('/bom/products').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const productsList = productsRaw?.data || productsRaw || []
 
   const byProduct = useQuery({
     queryKey: ['report-product', dateFrom, dateTo, product],
@@ -273,8 +288,8 @@ export default function ReportsPage() {
   })
 
   const byMachine = useQuery({
-    queryKey: ['report-machine', dateFrom, dateTo],
-    queryFn: () => api.get('/reports/prr/by-machine', { params: { dateFrom, dateTo } }).then(r => r.data),
+    queryKey: ['report-machine', dateFrom, dateTo, machineId],
+    queryFn: () => api.get('/reports/prr/by-machine', { params: { dateFrom, dateTo, machineId: machineId || undefined } }).then(r => r.data),
     enabled: tab === 'machine' && !!(dateFrom && dateTo),
   })
 
@@ -339,7 +354,15 @@ export default function ReportsPage() {
               <label className="text-xs text-slate-500 block mb-1">Pana la</label>
               <input className="input w-36" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
             </div>
-            <input className="input w-48" placeholder="Reper (optional)" value={product} onChange={e => setProduct(e.target.value)} />
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Reper / Produs</label>
+              <select className="input w-48" value={product} onChange={e => setProduct(e.target.value)}>
+                <option value="">Toate reperele</option>
+                {productsList.map(p => (
+                  <option key={p.id} value={p.code || p.name}>{p.code ? `${p.code} — ${p.name}` : p.name}</option>
+                ))}
+              </select>
+            </div>
             <OldExportButtons params={{ type: 'prr_product', dateFrom, dateTo, product: product || undefined }} />
             <ExcelExportButton params={{ type: 'prr_product', dateFrom, dateTo, product: product || undefined }} />
           </div>
@@ -406,7 +429,25 @@ export default function ReportsPage() {
               <label className="text-xs text-slate-500 block mb-1">Pana la</label>
               <input className="input w-36" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
             </div>
-            <ExcelExportButton params={{ type: 'prr_machine', dateFrom, dateTo }} />
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Masina</label>
+              <select className="input w-48" value={machineId} onChange={e => setMachineId(e.target.value)}>
+                <option value="">Toate masinile</option>
+                {machinesList.map(m => (
+                  <option key={m.id} value={m.id}>{m.code ? `${m.code} — ${m.name}` : m.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Reper / Produs</label>
+              <select className="input w-48" value={product} onChange={e => setProduct(e.target.value)}>
+                <option value="">Toate reperele</option>
+                {productsList.map(p => (
+                  <option key={p.id} value={p.code || p.name}>{p.code ? `${p.code} — ${p.name}` : p.name}</option>
+                ))}
+              </select>
+            </div>
+            <ExcelExportButton params={{ type: 'prr_machine', dateFrom, dateTo, machineId: machineId || undefined, product: product || undefined }} />
           </div>
           {byMachine.isLoading && <p className="text-slate-400">Se incarca...</p>}
           {!(dateFrom && dateTo) && <p className="text-slate-400 text-sm">Selecteaza intervalul de date.</p>}

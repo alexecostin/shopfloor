@@ -64,7 +64,12 @@ function PlanuriTab() {
       setShowModal(false)
       qc.invalidateQueries({ queryKey: ['quality-plans'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la creare plan'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'Eroare la creare plan. Incercati din nou.');
+    },
   })
 
   const plans = data?.data || []
@@ -252,7 +257,12 @@ function MasurariTab() {
       setShowForm(false)
       qc.invalidateQueries({ queryKey: ['quality-measurements'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la inregistrare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'Eroare la inregistrare. Incercati din nou.');
+    },
   })
 
   const plans = plansData?.data || []
@@ -753,7 +763,11 @@ function NCRTab() {
       setShowModal(false)
       qc.invalidateQueries({ queryKey: ['quality-ncr'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la creare NCR'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else toast.error(msg || 'Eroare la creare NCR. Incercati din nou.');
+    },
   })
 
   const updateMut = useMutation({
@@ -763,7 +777,7 @@ function NCRTab() {
       qc.invalidateQueries({ queryKey: ['quality-ncr'] })
       setSelectedNCR(null)
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la actualizare'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la actualizare. Incercati din nou.'); },
   })
 
   const closeMut = useMutation({
@@ -773,7 +787,7 @@ function NCRTab() {
       qc.invalidateQueries({ queryKey: ['quality-ncr'] })
       setSelectedNCR(null)
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la inchidere'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la inchidere. Incercati din nou.'); },
   })
 
   const ncrList = data?.data || []
@@ -1054,7 +1068,11 @@ function CAPATab() {
       setShowModal(false)
       qc.invalidateQueries({ queryKey: ['quality-capa'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la creare CAPA'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else toast.error(msg || 'Eroare la creare CAPA. Incercati din nou.');
+    },
   })
 
   const updateMut = useMutation({
@@ -1063,7 +1081,7 @@ function CAPATab() {
       toast.success('CAPA actualizat')
       qc.invalidateQueries({ queryKey: ['quality-capa'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la actualizare'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la actualizare. Incercati din nou.'); },
   })
 
   const verifyMut = useMutation({
@@ -1072,7 +1090,7 @@ function CAPATab() {
       toast.success('CAPA verificat')
       qc.invalidateQueries({ queryKey: ['quality-capa'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la verificare'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la verificare. Incercati din nou.'); },
   })
 
   const { data: ncrData } = useQuery({

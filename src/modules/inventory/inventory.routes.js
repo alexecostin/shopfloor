@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validate.js';
 import * as v from './inventory.validation.js';
 import * as c from './inventory.controller.js';
 import * as suppliers from './item-suppliers.service.js';
+import * as mrpSvc from '../../services/mrp.service.js';
 
 const router = Router();
 const mgr = authorize('admin', 'production_manager');
@@ -55,6 +56,29 @@ router.get('/items/:itemId/purchase-history', authenticate, async (req, res, nex
 });
 router.get('/items/:itemId/price-trend', authenticate, async (req, res, next) => {
   try { res.json(await suppliers.getPriceTrend(req.params.itemId)); } catch(e) { next(e); }
+});
+
+// MRP - Material Requirements Planning
+router.post('/mrp/calculate', authenticate, mgr, async (req, res, next) => {
+  try {
+    const { workOrderIds } = req.body;
+    if (!Array.isArray(workOrderIds) || workOrderIds.length === 0) {
+      return res.status(400).json({ message: 'workOrderIds este obligatoriu si trebuie sa fie un array.' });
+    }
+    const results = await mrpSvc.calculateRequirements(workOrderIds);
+    res.json(results);
+  } catch (e) { next(e); }
+});
+
+router.post('/mrp/generate-pos', authenticate, mgr, async (req, res, next) => {
+  try {
+    const { requirements } = req.body;
+    if (!Array.isArray(requirements)) {
+      return res.status(400).json({ message: 'requirements este obligatoriu si trebuie sa fie un array.' });
+    }
+    const pos = await mrpSvc.generatePOsFromMRP(requirements, req.user?.id);
+    res.json(pos);
+  } catch (e) { next(e); }
 });
 
 export default router;

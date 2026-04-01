@@ -16,7 +16,7 @@ import {
   AlertTriangle, Check, ChevronDown, ChevronUp, Save, Settings2,
   Wrench, Gauge, ArrowLeft, FileCheck, GripVertical,
   Factory, Layers, Box, Clock, FileText, Cpu, Eye,
-  Download, CheckCircle2, CircleDot, ArrowRight,
+  Download, CheckCircle2, CircleDot, ArrowRight, Copy, LayoutTemplate,
 } from 'lucide-react'
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -673,8 +673,43 @@ function NewOperationModal({ productId, nextSequence, onClose, onCreated }) {
     sequence: nextSequence || 10,
     cycle_time_seconds: '',
     time_unit: 'seconds',
+    setup_time_minutes: '',
+    machine_type: '',
+    reject_action: 'scrap',
+    tools_config: [],
+    machine_parameters: [],
+    consumables: [],
+    attention_points: [],
   })
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  // Fetch operation templates
+  const { data: templates } = useQuery({
+    queryKey: ['operation-templates'],
+    queryFn: () => api.get('/bom/operation-templates').then(r => r.data),
+  })
+
+  const handleTemplateSelect = (e) => {
+    const tplId = e.target.value
+    if (!tplId) return
+    const tpl = (templates || []).find(t => t.id === tplId)
+    if (!tpl) return
+    setForm(prev => ({
+      ...prev,
+      operation_name: tpl.name || prev.operation_name,
+      operation_type: tpl.operation_type || prev.operation_type,
+      machine_type: tpl.machine_type || prev.machine_type,
+      cycle_time_seconds: tpl.default_cycle_time_seconds || prev.cycle_time_seconds,
+      time_unit: tpl.default_time_unit || prev.time_unit,
+      setup_time_minutes: tpl.default_setup_time_minutes || prev.setup_time_minutes,
+      reject_action: tpl.default_reject_action || prev.reject_action,
+      tools_config: parseJsonArray(tpl.default_tools_config),
+      machine_parameters: parseJsonArray(tpl.default_machine_parameters),
+      consumables: parseJsonArray(tpl.default_consumables),
+      attention_points: parseJsonArray(tpl.default_attention_points),
+    }))
+    toast.success(`Template "${tpl.name}" aplicat.`)
+  }
 
   const mutation = useMutation({
     mutationFn: (data) => api.post(`/bom/products/${productId}/operations`, data),
@@ -687,6 +722,22 @@ function NewOperationModal({ productId, nextSequence, onClose, onCreated }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
         <h3 className="font-semibold text-slate-800 mb-4">Adauga operatie</h3>
         <div className="space-y-3">
+          {/* Template selector */}
+          {templates && templates.length > 0 && (
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block flex items-center gap-1">
+                <LayoutTemplate size={12} /> Selecteaza template
+              </label>
+              <select className="input text-sm" defaultValue="" onChange={handleTemplateSelect}>
+                <option value="">-- Fara template (manual) --</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({OP_TYPE_LABELS[t.operation_type] || t.operation_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <input className="input" placeholder="Nume operatie *" value={form.operation_name} onChange={f('operation_name')} />
           <select className="input" value={form.operation_type} onChange={f('operation_type')}>
             <option value="">Selecteaza tip</option>
@@ -711,6 +762,13 @@ function NewOperationModal({ productId, nextSequence, onClose, onCreated }) {
                 sequence: Number(form.sequence) || nextSequence,
                 cycleTimeSeconds: ct,
                 timeUnit: form.time_unit,
+                setupTimeMinutes: form.setup_time_minutes ? Number(form.setup_time_minutes) : null,
+                machineType: form.machine_type || null,
+                rejectAction: form.reject_action || 'scrap',
+                toolsConfig: form.tools_config,
+                machineParameters: form.machine_parameters,
+                consumables: form.consumables,
+                attentionPoints: form.attention_points,
               })
             }}
             disabled={mutation.isPending || !form.operation_name}
@@ -1094,6 +1152,20 @@ function MBOMVisualEditor({ orderId, onBack }) {
     onError: (err) => toast.error(err.response?.data?.message || 'Eroare la validare.'),
   })
 
+  // ─── MBOM Reuse ───────────────────────────────────────────────────────────
+
+  const reusableProduct = mbom?.reusableProduct || null
+  const [reuseDismissed, setReuseDismissed] = useState(false)
+
+  const copyMbomMut = useMutation({
+    mutationFn: ({ sourceId, targetId }) => api.post(`/bom/products/${targetId}/copy-mbom-from/${sourceId}`),
+    onSuccess: (res) => {
+      toast.success(`MBOM reutilizat: ${res.data.copiedOperations} operatii, ${res.data.copiedMaterials} materiale copiate.`)
+      refetch()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la copiere MBOM.'),
+  })
+
   // ─── Derived data ─────────────────────────────────────────────────────────
 
   const order = mbom?.order
@@ -1307,6 +1379,36 @@ function MBOMVisualEditor({ orderId, onBack }) {
             </p>
           </div>
         </div>
+
+        {/* MBOM Reuse Banner */}
+        {reusableProduct && allOperations.length === 0 && !reuseDismissed && (
+          <div className="shrink-0 bg-blue-50 border-b border-blue-200 px-4 py-3 flex items-center gap-3">
+            <Copy size={18} className="text-blue-600 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-800">
+                Acest produs a fost fabricat anterior. Doriti sa reutilizati MBOM-ul existent?
+              </p>
+              <p className="text-xs text-blue-600 mt-0.5">
+                Sursa: {reusableProduct.name} ({reusableProduct.reference})
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => copyMbomMut.mutate({ sourceId: reusableProduct.id, targetId: product.id })}
+                disabled={copyMbomMut.isPending}
+                className="btn-primary text-xs flex items-center gap-1.5"
+              >
+                <Copy size={12} /> {copyMbomMut.isPending ? 'Se copiaza...' : 'Reutilizeaza'}
+              </button>
+              <button
+                onClick={() => setReuseDismissed(true)}
+                className="btn-secondary text-xs"
+              >
+                Defineste de la zero
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 3-panel layout */}
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">

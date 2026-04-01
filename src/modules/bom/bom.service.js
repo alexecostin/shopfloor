@@ -305,7 +305,40 @@ export async function getMBOMForOrder(orderId) {
       .first();
   }
 
-  if (!product) return { order, product: null, operations: [], components: [] };
+  if (!product) {
+    // Check if any other product with the same reference has operations (for MBOM reuse suggestion)
+    let reusableProduct = null;
+    const ref = order.product_reference || order.product_name;
+    if (ref) {
+      const candidates = await db('bom.products')
+        .where('reference', ref)
+        .orWhere('name', 'ilike', `%${escapeLike(ref)}%`);
+      for (const cand of candidates) {
+        const ops = await db('bom.operations').where('product_id', cand.id).limit(1);
+        if (ops.length > 0) { reusableProduct = cand; break; }
+      }
+    }
+    return { order, product: null, operations: [], components: [], reusableProduct: reusableProduct || null };
+  }
+
+  // Check if this product already has operations defined (reuse detection)
+  const existingOps = await db('bom.operations').where('product_id', product.id);
+  let isReused = false;
+  let reusableProduct = null;
+
+  if (existingOps.length === 0) {
+    // No operations for this product — look for another product with same reference that has operations
+    const candidates = await db('bom.products')
+      .where('reference', product.reference)
+      .whereNot('id', product.id);
+    for (const cand of candidates) {
+      const ops = await db('bom.operations').where('product_id', cand.id).limit(1);
+      if (ops.length > 0) { reusableProduct = cand; break; }
+    }
+  } else {
+    // Product has operations — check if they were copied (flag for UI)
+    isReused = existingOps.length > 0;
+  }
 
   // Get operations with machine names
   const operations = await db('bom.operations as o')
@@ -359,7 +392,7 @@ export async function getMBOMForOrder(orderId) {
     machineLoad = [];
   }
 
-  return { order, product, operations, components, machineLoad };
+  return { order, product, operations, components, machineLoad, isReused, reusableProduct };
 }
 
 // ─── Operation Alternatives ──────────────────────────────────────────────────
@@ -443,4 +476,22 @@ export async function calculateCost(productId) {
     operationCosts,
     summary: { totalMaterial, totalOperation, overhead, totalCostPerPiece },
   };
+}
+
+// ─── Copy MBOM from one product to another ──────────────────────────────────
+
+export async function copyMBOMFromProduct(sourceProductId, targetProductId) {
+  // Copy all operations from source to target
+  const ops = await db('bom.operations').where('product_id', sourceProductId);
+  for (const op of ops) {
+    const { id, product_id, created_at, ...data } = op;
+    await db('bom.operations').insert({ ...data, product_id: targetProductId });
+  }
+  // Copy materials
+  const mats = await db('bom.materials').where('product_id', sourceProductId);
+  for (const mat of mats) {
+    const { id, product_id, created_at, ...data } = mat;
+    await db('bom.materials').insert({ ...data, product_id: targetProductId });
+  }
+  return { copiedOperations: ops.length, copiedMaterials: mats.length };
 }

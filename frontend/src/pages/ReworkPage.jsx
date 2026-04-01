@@ -38,19 +38,37 @@ function DetailModal({ item, machines, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => api.put(`/production/rework/${item.id}`, data),
     onSuccess: () => { qc.invalidateQueries(['rework-queue']); toast.success('Actualizat.'); },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const startMutation = useMutation({
     mutationFn: () => api.post(`/production/rework/${item.id}/start`),
     onSuccess: () => { qc.invalidateQueries(['rework-queue']); toast.success('Reprelucrare inceputa.'); },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const completeMutation = useMutation({
     mutationFn: (data) => api.post(`/production/rework/${item.id}/complete`, data),
     onSuccess: () => { qc.invalidateQueries(['rework-queue']); qc.invalidateQueries(['rework-stats']); toast.success('Reprelucrare finalizata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const isDone = item.status === 'completed' || item.status === 'scrapped'
@@ -95,7 +113,8 @@ function DetailModal({ item, machines, onClose }) {
           {/* Assign target machine */}
           {!isDone && (
             <div className="border border-slate-200 rounded-lg p-3 space-y-2">
-              <label className="text-xs font-medium text-slate-600">Masina destinatie</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Masina destinatie</label>
+              <p className="text-[11px] text-slate-400 mb-1">Selecteaza masina pe care se va face reprelucrarea</p>
               <div className="flex gap-2">
                 <select className="input flex-1" value={targetMachineId} onChange={e => setTargetMachineId(e.target.value)}>
                   <option value="">Selecteaza masina...</option>
@@ -249,6 +268,7 @@ export default function ReworkPage() {
 
       {/* Filter */}
       <div className="flex gap-2 items-center">
+        <label className="block text-xs font-medium text-slate-600">Filtreaza dupa status:</label>
         <select
           className="input w-48"
           value={statusFilter}
@@ -314,7 +334,11 @@ export default function ReworkPage() {
               )
             })}
             {items.length === 0 && !isLoading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Niciun element in coada de reprelucrare.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center">
+                <RefreshCw size={40} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-500 font-medium">Niciun element in coada de reprelucrare</p>
+                <p className="text-slate-400 text-sm mt-1">Piesele de reprelucrare vor aparea automat din rapoartele de productie.</p>
+              </td></tr>
             )}
           </tbody>
         </table>

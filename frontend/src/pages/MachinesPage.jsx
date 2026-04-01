@@ -35,22 +35,46 @@ function MachineModal({ machine, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => isEdit ? api.put(`/machines/${machine.id}`, data) : api.post('/machines', data),
     onSuccess: () => { qc.invalidateQueries(['machines']); toast.success(isEdit ? 'Actualizat.' : 'Adaugat.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja. Codul trebuie sa fie unic.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza utilaj' : 'Utilaj nou'}</h3>
         <div className="space-y-3">
-          {!isEdit && <input className="input" placeholder="Cod * (ex: CNC-01)" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />}
-          <input className="input" placeholder="Denumire *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <LookupSelect lookupType="machine_types" value={form.type} onChange={v => setForm({ ...form, type: v })} placeholder="Tip masina" />
-          <input className="input" placeholder="Locatie (ex: Hala A)" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
-          <select className="input" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-            <option value="active">Activ</option>
-            <option value="maintenance">In mentenanta</option>
-            <option value="inactive">Inactiv</option>
-          </select>
+          {!isEdit && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Cod utilaj *</label>
+              <input className="input" placeholder="Ex: CNC-01" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
+              <p className="text-[11px] text-slate-400 mt-0.5">Codul trebuie sa fie unic si identifica utilajul in sistem</p>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Denumire *</label>
+            <input className="input" placeholder="Ex: Strung CNC Doosan" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip masina</label>
+            <LookupSelect lookupType="machine_types" value={form.type} onChange={v => setForm({ ...form, type: v })} placeholder="Tip masina" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Locatie</label>
+            <input className="input" placeholder="Ex: Hala A" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+            <select className="input" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+              <option value="active">Activ</option>
+              <option value="maintenance">In mentenanta</option>
+              <option value="inactive">Inactiv</option>
+            </select>
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -73,7 +97,13 @@ function CapabilityModal({ machineId, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post(`/machines/${machineId}/capabilities`, data),
     onSuccess: () => { qc.invalidateQueries(['machine-detail', machineId]); toast.success('Capabilitate adaugata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -321,7 +351,13 @@ export default function MachinesPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/machines/${id}`),
     onSuccess: () => { qc.invalidateQueries(['machines']); toast.success('Sters.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const [groupModal, setGroupModal] = useState(false)
@@ -329,7 +365,13 @@ export default function MachinesPage() {
   const createGroup = useMutation({
     mutationFn: (data) => api.post('/machines/groups', data),
     onSuccess: () => { qc.invalidateQueries(['machine-groups']); toast.success('Grupa creata.'); setGroupModal(false) },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -360,7 +402,12 @@ export default function MachinesPage() {
 
       {tab === 'machines' && (
         <>
-          {isLoading && <p className="text-slate-400 text-sm">Se incarca...</p>}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
+              <span className="ml-2 text-slate-500">Se incarca...</span>
+            </div>
+          )}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -390,7 +437,7 @@ export default function MachinesPage() {
                         {isAdmin && (
                           <>
                             <button onClick={() => setModal(m)} className="text-slate-300 hover:text-blue-500 transition-colors"><Pencil size={14} /></button>
-                            <button onClick={() => { if (confirm('Stergi utilajul?')) deleteMutation.mutate(m.id) }} className="text-slate-300 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
+                            <button onClick={() => { if (confirm('Sigur doriti sa stergeti? Aceasta actiune este ireversibila.')) deleteMutation.mutate(m.id) }} className="text-slate-300 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
                           </>
                         )}
                         <ChevronRight size={14} className="text-slate-300" />
@@ -399,7 +446,11 @@ export default function MachinesPage() {
                   </tr>
                 ))}
                 {data?.data?.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Niciun utilaj. Apasa "Adauga".</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-12 text-center">
+                    <Cpu size={40} className="mx-auto text-slate-300 mb-3" />
+                    <p className="text-slate-500 font-medium">Niciun utilaj</p>
+                    <p className="text-slate-400 text-sm mt-1">Apasa butonul "Adauga" pentru a inregistra primul utilaj.</p>
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -440,8 +491,14 @@ export default function MachinesPage() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h3 className="font-semibold text-slate-800 mb-4">Grupa noua</h3>
             <div className="space-y-3">
-              <input className="input" placeholder="Denumire *" value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} />
-              <input className="input" placeholder="Descriere (optional)" value={groupForm.description} onChange={e => setGroupForm({ ...groupForm, description: e.target.value })} />
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Denumire grupa *</label>
+                <input className="input" placeholder="Ex: Strunguri CNC" value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Descriere</label>
+                <input className="input" placeholder="Descriere (optional)" value={groupForm.description} onChange={e => setGroupForm({ ...groupForm, description: e.target.value })} />
+              </div>
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setGroupModal(false)} className="btn-secondary">Anuleaza</button>

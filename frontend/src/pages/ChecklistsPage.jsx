@@ -16,7 +16,13 @@ function CompleteModal({ template, machines, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/checklists/complete', data),
     onSuccess: () => { qc.invalidateQueries(['completions']); toast.success('Checklist completat!'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function toggle(itemId) {
@@ -30,13 +36,19 @@ function CompleteModal({ template, machines, onClose }) {
         <p className="text-xs text-slate-400 mb-4">Completeaza toate punctele obligatorii</p>
 
         <div className="space-y-3 mb-4">
-          <select className="input" value={machineId} onChange={e => setMachineId(e.target.value)}>
-            <option value="">Selecteaza utilaj</option>
-            {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-          </select>
-          <select className="input" value={shift} onChange={e => setShift(e.target.value)}>
-            {['Tura I', 'Tura II', 'Tura III'].map(s => <option key={s}>{s}</option>)}
-          </select>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Utilaj *</label>
+            <select className="input" value={machineId} onChange={e => setMachineId(e.target.value)}>
+              <option value="">Selecteaza utilaj</option>
+              {machines?.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tura</label>
+            <select className="input" value={shift} onChange={e => setShift(e.target.value)}>
+              {['Tura I', 'Tura II', 'Tura III'].map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -96,7 +108,13 @@ function TemplateModal({ onClose, editTemplate }) {
       toast.success(isEdit ? 'Template actualizat.' : 'Template creat.')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const addItem = () => setForm({ ...form, items: [...form.items, ''] })
@@ -108,9 +126,18 @@ function TemplateModal({ onClose, editTemplate }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza template' : 'Template nou'}</h3>
         <div className="space-y-3">
-          <input className="input" placeholder="Nume *" value={form.name} onChange={f('name')} />
-          <input className="input" placeholder="Descriere" value={form.description} onChange={f('description')} />
-          <input className="input" placeholder="Categorie" value={form.category} onChange={f('category')} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nume checklist *</label>
+            <input className="input" placeholder="Ex: Verificare zilnica CNC" value={form.name} onChange={f('name')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere</label>
+            <input className="input" placeholder="Descrierea scopului checklistului" value={form.description} onChange={f('description')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Categorie</label>
+            <input className="input" placeholder="Ex: Calitate, Siguranta, Mentenanta" value={form.category} onChange={f('category')} />
+          </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">

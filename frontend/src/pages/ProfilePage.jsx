@@ -22,7 +22,10 @@ export default function ProfilePage() {
   const profileMut = useMutation({
     mutationFn: (data) => api.put(`/auth/users/${user?.id}`, data),
     onSuccess: () => toast.success('Profil actualizat.'),
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la salvare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      toast.error(msg || 'Eroare la salvarea profilului. Incercati din nou.');
+    },
   })
 
   const pwMut = useMutation({
@@ -32,8 +35,10 @@ export default function ProfilePage() {
       setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
       setPwError('')
     },
-    onError: () => {
-      setPwError('Parola curenta incorecta')
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('invalid') || msg.includes('incorrect')) setPwError('Parola curenta incorecta.');
+      else setPwError(msg || 'Eroare la schimbarea parolei. Incercati din nou.');
     },
   })
 

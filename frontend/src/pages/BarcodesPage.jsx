@@ -26,11 +26,14 @@ function CoduriTab() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <select className="input w-48" value={filterType} onChange={e => setFilterType(e.target.value)}>
-          <option value="">Toate tipurile</option>
-          {ENTITY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
+      <div className="flex items-end gap-3 mb-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Filtreaza dupa tip entitate</label>
+          <select className="input w-48" value={filterType} onChange={e => setFilterType(e.target.value)}>
+            <option value="">Toate tipurile</option>
+            {ENTITY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
         <button onClick={() => refetch()} className="btn-secondary flex items-center gap-1">
           <RefreshCw size={14} /> Reincarca
         </button>
@@ -101,7 +104,11 @@ function GenereazaTab() {
       setSelected([])
       qc.invalidateQueries(['barcodes'])
     },
-    onError: () => toast.error('Eroare la generare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Codurile pentru entitatile selectate exista deja.');
+      else toast.error(msg || 'Eroare la generare. Incercati din nou.');
+    },
   })
 
   function toggleItem(id, label) {

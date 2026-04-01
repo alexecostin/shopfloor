@@ -31,7 +31,13 @@ function PlannedModal({ machines, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/maintenance/planned', data),
     onSuccess: () => { qc.invalidateQueries(['maintenance-planned']); toast.success('Interventie planificata creata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -179,19 +185,37 @@ function PlannedDetailModal({ planned, machines, tenantCurrency, canManage, onCl
   const confirmMutation = useMutation({
     mutationFn: () => api.put(`/maintenance/planned/${planned.id}/confirm`),
     onSuccess: () => { qc.invalidateQueries(['maintenance-planned']); toast.success('Interventie confirmata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const startMutation = useMutation({
     mutationFn: () => api.put(`/maintenance/planned/${planned.id}/start`),
     onSuccess: () => { qc.invalidateQueries(['maintenance-planned']); toast.success('Interventie inceputa.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const completeMutation = useMutation({
     mutationFn: (data) => api.put(`/maintenance/planned/${planned.id}/complete`, data),
     onSuccess: () => { qc.invalidateQueries(['maintenance-planned']); toast.success('Interventie finalizata.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -394,13 +418,25 @@ function PlannedLifecycleButtons({ planned, canManage }) {
   const confirmMutation = useMutation({
     mutationFn: () => api.put(`/maintenance/planned/${planned.id}/confirm`),
     onSuccess: () => { qc.invalidateQueries(['maintenance-planned']); toast.success('Confirmat.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const startMutation = useMutation({
     mutationFn: () => api.put(`/maintenance/planned/${planned.id}/start`),
     onSuccess: () => { qc.invalidateQueries(['maintenance-planned']); toast.success('Inceput.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   if (!canManage) return null
@@ -466,7 +502,13 @@ function NewRequestModal({ machines, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/maintenance', data),
     onSuccess: () => { qc.invalidateQueries(['maintenance']); toast.success('Cerere trimisa.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -474,23 +516,36 @@ function NewRequestModal({ machines, onClose }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">Cerere mentenanta</h3>
         <div className="space-y-3">
-          <SearchableSelect
-            endpoint="/machines"
-            labelField="name"
-            valueField="id"
-            placeholder="Selecteaza utilaj"
-            value={form.machineId || null}
-            onChange={(id) => setForm(prev => ({ ...prev, machineId: id || '' }))}
-            allowCreate={false}
-          />
-          <input className="input" placeholder="Tipul problemei" value={form.problemType} onChange={e => setForm({ ...form, problemType: e.target.value })} />
-          <textarea className="input resize-none" rows={3} placeholder="Descriere (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-          <select className="input" value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
-            <option value="low">Scazuta</option>
-            <option value="normal">Normala</option>
-            <option value="high">Ridicata</option>
-            <option value="critical">Critica</option>
-          </select>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Utilaj *</label>
+            <SearchableSelect
+              endpoint="/machines"
+              labelField="name"
+              valueField="id"
+              placeholder="Selecteaza utilaj"
+              value={form.machineId || null}
+              onChange={(id) => setForm(prev => ({ ...prev, machineId: id || '' }))}
+              allowCreate={false}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tipul problemei *</label>
+            <input className="input" placeholder="Ex: Vibratii anormale, Scurgere ulei" value={form.problemType} onChange={e => setForm({ ...form, problemType: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere</label>
+            <textarea className="input resize-none" rows={3} placeholder="Descrieti problema in detaliu (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Prioritate</label>
+            <select className="input" value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+              <option value="low">Scazuta</option>
+              <option value="normal">Normala</option>
+              <option value="high">Ridicata</option>
+              <option value="critical">Critica</option>
+            </select>
+            <p className="text-[11px] text-slate-400 mt-0.5">Critica = opreste productia imediat, Ridicata = afecteaza calitatea</p>
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -525,7 +580,13 @@ function RequestDetailModal({ request, machines, canManage, user, onClose }) {
         onClose()
       }
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const timeSinceCreated = request.created_at
@@ -800,7 +861,13 @@ export default function MaintenancePage() {
   const update = useMutation({
     mutationFn: ({ id, ...body }) => api.put(`/maintenance/${id}`, body),
     onSuccess: () => { qc.invalidateQueries(['maintenance']); toast.success('Actualizat.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const plannedList = planned?.data || planned || []

@@ -1,9 +1,31 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, Clock, Calendar, Grid, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Clock, Calendar, Grid, AlertCircle, Pencil } from 'lucide-react'
+
+function calcProductiveMinutes(startTime, endTime, breakMinutes, crossesMidnight) {
+  const [sh, sm] = (startTime || '00:00').split(':').map(Number)
+  const [eh, em] = (endTime || '00:00').split(':').map(Number)
+  const startMin = sh * 60 + sm
+  const endMin = eh * 60 + em
+  const brk = Number(breakMinutes) || 0
+  let total
+  if (crossesMidnight) {
+    total = 1440 - startMin + endMin - brk
+  } else {
+    total = endMin - startMin - brk
+  }
+  return Math.max(0, total)
+}
+
+function formatProductiveLabel(minutes) {
+  if (minutes <= 0) return '0h 0min (0 min productiv)'
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${h}h ${m}min (${minutes} min productiv)`
+}
 
 const DAYS = ['Luni', 'Marti', 'Miercuri', 'Joi', 'Vineri', 'Sambata', 'Duminica']
 
@@ -37,8 +59,10 @@ function OrgUnitSelect({ value, onChange }) {
 
 function DefinitionsTab({ orgUnitId }) {
   const qc = useQueryClient()
-  const [form, setForm] = useState({ shiftName: '', shiftCode: '', startTime: '06:00', endTime: '14:00', breakMinutes: 30 })
+  const [form, setForm] = useState({ shiftName: '', shiftCode: '', startTime: '06:00', endTime: '14:00', breakMinutes: 30, crossesMidnight: false })
   const [showAdd, setShowAdd] = useState(false)
+  const [editDef, setEditDef] = useState(null)
+  const [editForm, setEditForm] = useState({ shiftName: '', shiftCode: '', startTime: '06:00', endTime: '14:00', breakMinutes: 30, crossesMidnight: false })
 
   const { data: defs = [], isLoading } = useQuery({
     queryKey: ['shift-defs', orgUnitId],
@@ -52,11 +76,32 @@ function DefinitionsTab({ orgUnitId }) {
     onError: e => toast.error(e.response?.data?.message || 'Eroare'),
   })
 
+  const update = useMutation({
+    mutationFn: ({ id, ...data }) => api.put(`/shifts/definitions/${id}`, { ...data, orgUnitId }),
+    onSuccess: () => { qc.invalidateQueries(['shift-defs', orgUnitId]); setEditDef(null); toast.success('Tura actualizata.') },
+    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+  })
+
   const del = useMutation({
     mutationFn: id => api.delete(`/shifts/definitions/${id}`),
     onSuccess: () => { qc.invalidateQueries(['shift-defs', orgUnitId]); toast.success('Sters.') },
     onError: e => toast.error(e.response?.data?.message || 'Eroare'),
   })
+
+  function openEdit(d) {
+    setEditDef(d)
+    setEditForm({
+      shiftName: d.shift_name || '',
+      shiftCode: d.shift_code || '',
+      startTime: String(d.start_time).substring(0, 5),
+      endTime: String(d.end_time).substring(0, 5),
+      breakMinutes: d.break_minutes || 0,
+      crossesMidnight: !!d.crosses_midnight,
+    })
+  }
+
+  const createProductiveMin = useMemo(() => calcProductiveMinutes(form.startTime, form.endTime, form.breakMinutes, form.crossesMidnight), [form.startTime, form.endTime, form.breakMinutes, form.crossesMidnight])
+  const editProductiveMin = useMemo(() => calcProductiveMinutes(editForm.startTime, editForm.endTime, editForm.breakMinutes, editForm.crossesMidnight), [editForm.startTime, editForm.endTime, editForm.breakMinutes, editForm.crossesMidnight])
 
   if (!orgUnitId) return <div className="text-slate-400 text-sm py-8 text-center">Selecteaza o fabrica sau sectie pentru a gestiona turele.</div>
 
@@ -90,7 +135,10 @@ function DefinitionsTab({ orgUnitId }) {
                 </td>
                 <td className="px-4 py-3 text-slate-500">{d.break_minutes} min</td>
                 <td className="px-4 py-3 text-slate-700 font-medium">{d.productive_minutes} min</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
+                  <button onClick={() => openEdit(d)} className="text-slate-300 hover:text-blue-500">
+                    <Pencil size={14} />
+                  </button>
                   <button onClick={() => { if(confirm('Stergi tura?')) del.mutate(d.id) }} className="text-slate-300 hover:text-red-400">
                     <Trash2 size={14} />
                   </button>
@@ -133,11 +181,65 @@ function DefinitionsTab({ orgUnitId }) {
                 <label className="text-xs text-slate-500 mb-1 block">Pauza masa (minute)</label>
                 <input type="number" min={0} max={120} className="input" value={form.breakMinutes} onChange={e => setForm({...form, breakMinutes: +e.target.value})} />
               </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={form.crossesMidnight} onChange={e => setForm({...form, crossesMidnight: e.target.checked})} />
+                Trece peste miezul noptii
+              </label>
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-sm text-blue-700">
+                Ore de munca: <strong>{formatProductiveLabel(createProductiveMin)}</strong>
+              </div>
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setShowAdd(false)} className="btn-secondary">Anuleaza</button>
               <button onClick={() => create.mutate(form)} disabled={!form.shiftCode || !form.shiftName || create.isPending} className="btn-primary">
                 {create.isPending ? 'Se salveaza...' : 'Salveaza'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editDef && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="font-semibold text-slate-800 mb-4">Editeaza tura</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Cod *</label>
+                  <input className="input" value={editForm.shiftCode} onChange={e => setEditForm({...editForm, shiftCode: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Denumire *</label>
+                  <input className="input" value={editForm.shiftName} onChange={e => setEditForm({...editForm, shiftName: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Ora start</label>
+                  <input type="time" className="input" value={editForm.startTime} onChange={e => setEditForm({...editForm, startTime: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Ora final</label>
+                  <input type="time" className="input" value={editForm.endTime} onChange={e => setEditForm({...editForm, endTime: e.target.value})} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Pauza masa (minute)</label>
+                <input type="number" min={0} max={120} className="input" value={editForm.breakMinutes} onChange={e => setEditForm({...editForm, breakMinutes: +e.target.value})} />
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={editForm.crossesMidnight} onChange={e => setEditForm({...editForm, crossesMidnight: e.target.checked})} />
+                Trece peste miezul noptii
+              </label>
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-sm text-blue-700">
+                Ore de munca: <strong>{formatProductiveLabel(editProductiveMin)}</strong>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setEditDef(null)} className="btn-secondary">Anuleaza</button>
+              <button onClick={() => update.mutate({ id: editDef.id, ...editForm })} disabled={!editForm.shiftCode || !editForm.shiftName || update.isPending} className="btn-primary">
+                {update.isPending ? 'Se salveaza...' : 'Salveaza'}
               </button>
             </div>
           </div>

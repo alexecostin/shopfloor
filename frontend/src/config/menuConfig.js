@@ -35,6 +35,7 @@ const ALL_MENUS = {
 
   production_manager: [
     { id: 'pm-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/', module: null, permission: null },
+    { id: 'pm-client-orders', label: 'Comenzi Clienti', icon: 'ShoppingBag', path: '/client-orders', module: null, permission: null },
     {
       id: 'pm-planning', label: 'Planificare', icon: 'Calendar', path: '/planning', module: 'planning', permission: null,
       children: [
@@ -103,6 +104,21 @@ const ALL_MENUS = {
     { id: 'log-reports', label: 'Rapoarte stocuri', icon: 'BarChart2', path: '/reports', module: 'reports_advanced', permission: null },
   ],
 
+  commercial: [
+    { id: 'com-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/', module: null, permission: null },
+    { id: 'com-orders', label: 'Comenzi Clienti', icon: 'ShoppingBag', path: '/client-orders', module: null, permission: null },
+    {
+      id: 'com-clients', label: 'Clienti', icon: 'Building2', path: '/companies', module: 'companies', permission: null,
+      children: [
+        { id: 'com-companies', label: 'Companii', path: '/companies', permission: null },
+        { id: 'com-contacts', label: 'Contacte', path: '/companies', permission: null },
+      ]
+    },
+    { id: 'com-documents', label: 'Documente', icon: 'FileArchive', path: '/documents', module: null, permission: null },
+    { id: 'com-shipments', label: 'Expeditii', icon: 'Truck', path: '/shipments', module: null, permission: null },
+    { id: 'com-reports', label: 'Rapoarte', icon: 'BarChart2', path: '/reports', module: 'reports_advanced', permission: null },
+  ],
+
   viewer: [
     { id: 'view-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/', module: null, permission: null },
     { id: 'view-reports', label: 'Rapoarte', icon: 'BarChart2', path: '/reports', module: 'reports_advanced', permission: null },
@@ -110,6 +126,7 @@ const ALL_MENUS = {
 
   admin: [
     { id: 'adm-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/', module: null, permission: null },
+    { id: 'adm-client-orders', label: 'Comenzi Clienti', icon: 'ShoppingBag', path: '/client-orders', module: null, permission: null },
     {
       id: 'adm-production', label: 'Productie', icon: 'Factory', path: '/production', module: 'production', permission: null,
       children: [

@@ -65,7 +65,13 @@ function CompanyModal({ onClose, editCompany }) {
       toast.success(isEdit ? 'Companie actualizata.' : 'Companie creata.')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -130,7 +136,13 @@ function EditContactModal({ contact, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.put(`/companies/contacts/${contact.id}`, data),
     onSuccess: () => { qc.invalidateQueries(['company']); toast.success('Contact actualizat.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -138,10 +150,22 @@ function EditContactModal({ contact, onClose }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">Editeaza contact</h3>
         <div className="space-y-3">
-          <input className="input" placeholder="Nume *" value={form.fullName} onChange={f('fullName')} />
-          <input className="input" placeholder="Functie" value={form.role} onChange={f('role')} />
-          <input className="input" placeholder="Telefon" value={form.phone} onChange={f('phone')} />
-          <input className="input" type="email" placeholder="Email" value={form.email} onChange={f('email')} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nume complet *</label>
+            <input className="input" placeholder="Ex: Ion Popescu" value={form.fullName} onChange={f('fullName')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Functie</label>
+            <input className="input" placeholder="Ex: Director achizitii" value={form.role} onChange={f('role')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+            <input className="input" placeholder="Ex: 0740123456" value={form.phone} onChange={f('phone')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+            <input className="input" type="email" placeholder="Ex: ion@exemplu.ro" value={form.email} onChange={f('email')} />
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -165,19 +189,37 @@ function CompanyDetail({ company, onClose }) {
   const contactMutation = useMutation({
     mutationFn: (data) => api.post(`/companies/${company.id}/contacts`, data),
     onSuccess: () => { qc.invalidateQueries(['company', company.id]); toast.success('Contact adaugat.'); setAddContact(false) },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteCompanyMut = useMutation({
     mutationFn: () => api.delete(`/companies/${company.id}`),
     onSuccess: () => { qc.invalidateQueries(['companies']); toast.success('Companie stearsa.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteContactMut = useMutation({
     mutationFn: (contactId) => api.delete(`/companies/contacts/${contactId}`),
     onSuccess: () => { qc.invalidateQueries(['company', company.id]); toast.success('Contact sters.') },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -198,7 +240,7 @@ function CompanyDetail({ company, onClose }) {
           <div className="flex gap-2">
             <button onClick={() => setEditCompany(true)} className="btn-secondary text-xs flex items-center gap-1"><Pencil size={12} /> Editeaza</button>
             <button
-              onClick={() => { if (confirm('Stergi compania?')) deleteCompanyMut.mutate() }}
+              onClick={() => { if (confirm('Sigur doriti sa stergeti compania? Aceasta actiune este ireversibila.')) deleteCompanyMut.mutate() }}
               className="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50"
             >
               <Trash2 size={12} />
@@ -220,10 +262,22 @@ function CompanyDetail({ company, onClose }) {
         {addContact && (
           <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
             <div className="grid grid-cols-2 gap-2">
-              <input className="input text-xs" placeholder="Nume *" value={contactForm.fullName} onChange={fc('fullName')} />
-              <input className="input text-xs" placeholder="Functie" value={contactForm.role} onChange={fc('role')} />
-              <input className="input text-xs" placeholder="Telefon" value={contactForm.phone} onChange={fc('phone')} />
-              <input className="input text-xs" placeholder="Email" value={contactForm.email} onChange={fc('email')} />
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Nume *</label>
+                <input className="input text-xs" placeholder="Ex: Ion Popescu" value={contactForm.fullName} onChange={fc('fullName')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Functie</label>
+                <input className="input text-xs" placeholder="Ex: Director" value={contactForm.role} onChange={fc('role')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                <input className="input text-xs" placeholder="Ex: 0740123456" value={contactForm.phone} onChange={fc('phone')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                <input className="input text-xs" placeholder="Ex: ion@exemplu.ro" value={contactForm.email} onChange={fc('email')} />
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setAddContact(false)} className="btn-secondary text-xs py-1">Anuleaza</button>
@@ -243,7 +297,7 @@ function CompanyDetail({ company, onClose }) {
               </div>
               {c.phone && <span className="text-xs text-slate-400">{c.phone}</span>}
               <button onClick={() => setEditContact(c)} className="text-slate-400 hover:text-blue-500"><Pencil size={13} /></button>
-              <button onClick={() => { if (confirm('Stergi contactul?')) deleteContactMut.mutate(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+              <button onClick={() => { if (confirm('Sigur doriti sa stergeti contactul? Aceasta actiune este ireversibila.')) deleteContactMut.mutate(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
             </div>
           ))}
         </div>
@@ -329,9 +383,10 @@ export default function CompaniesPage() {
               )
             })}
             {data?.data?.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                <Building2 size={32} className="mx-auto mb-2 text-slate-300" />
-                Nicio companie.
+              <tr><td colSpan={5} className="px-4 py-12 text-center">
+                <Building2 size={40} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-500 font-medium">Nicio companie</p>
+                <p className="text-slate-400 text-sm mt-1">Apasa butonul "Companie noua" pentru a adauga prima companie.</p>
               </td></tr>
             )}
           </tbody>

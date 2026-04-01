@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import httpClient from '../api/client';
 import toast from 'react-hot-toast';
@@ -46,6 +46,7 @@ function OrgTab() {
   const qc = useQueryClient();
   const { data: tree = [], isLoading } = useQuery({ queryKey: ['admin-org'], queryFn: () => api('/org') });
   const { data: types = [] } = useQuery({ queryKey: ['admin-org-types'], queryFn: () => api('/org/types') });
+  const { data: timezones = [] } = useQuery({ queryKey: ['admin-timezones'], queryFn: () => api('/settings/timezones') });
   const [showAdd, setShowAdd] = useState(false);
   const [showAddType, setShowAddType] = useState(false);
   const [editUnit, setEditUnit] = useState(null);
@@ -163,7 +164,12 @@ function OrgTab() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Fus orar</label>
-                <input placeholder="ex: Europe/Bucharest" value={editForm.timezone} onChange={e => setEditForm(p => ({...p, timezone: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm" />
+                <select value={editForm.timezone} onChange={e => setEditForm(p => ({...p, timezone: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">-- Selecteaza fus orar --</option>
+                  {timezones.map(tz => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
@@ -341,6 +347,8 @@ function UsersAdminTab() {
   const qc = useQueryClient();
   const [editUser, setEditUser] = useState(null);
   const [selectedRoles, setSelectedRoles] = useState([]);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({ fullName: '', email: '', password: '', role: 'operator', is_active: true });
 
   const setRoles = useMutation({
     mutationFn: ({ userId, roleIds }) => httpClient.put(`/admin/users/${userId}/roles`, { roleIds }).then(r => r.data),
@@ -348,47 +356,133 @@ function UsersAdminTab() {
     onError: e => toast.error(e.response?.data?.message || 'Eroare'),
   });
 
+  const createUser = useMutation({
+    mutationFn: data => httpClient.post('/auth/register', data).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries(['admin-users']);
+      setShowAddUser(false);
+      setNewUserForm({ fullName: '', email: '', password: '', role: 'operator', is_active: true });
+      toast.success('Utilizator creat.');
+    },
+    onError: e => toast.error(e.response?.data?.message || 'Eroare la creare utilizator.'),
+  });
+
   if (isLoading) return <div className="text-slate-400">Se incarca...</div>;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50"><tr>
-          <th className="text-left p-3 text-slate-500 font-medium">Utilizator</th>
-          <th className="text-left p-3 text-slate-500 font-medium">Email</th>
-          <th className="text-left p-3 text-slate-500 font-medium">Rol legacy</th>
-          <th className="text-left p-3 text-slate-500 font-medium">Actiuni</th>
-        </tr></thead>
-        <tbody>
-          {users.map(u => (
-            <tr key={u.id} className="border-t border-slate-100">
-              <td className="p-3 font-medium text-slate-800">{u.full_name}</td>
-              <td className="p-3 text-slate-500">{u.email}</td>
-              <td className="p-3"><span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{u.role}</span></td>
-              <td className="p-3">
-                <button onClick={() => { setEditUser(u); setSelectedRoles([]); }}
-                  className="text-xs text-blue-600 hover:text-blue-800">Seteaza Roluri</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={() => setShowAddUser(true)} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center gap-2">
+          <Plus size={14} /> Utilizator nou
+        </button>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50"><tr>
+            <th className="text-left p-3 text-slate-500 font-medium">Utilizator</th>
+            <th className="text-left p-3 text-slate-500 font-medium">Email</th>
+            <th className="text-left p-3 text-slate-500 font-medium">Rol legacy</th>
+            <th className="text-left p-3 text-slate-500 font-medium">Actiuni</th>
+          </tr></thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} className="border-t border-slate-100">
+                <td className="p-3 font-medium text-slate-800">{u.full_name}</td>
+                <td className="p-3 text-slate-500">{u.email}</td>
+                <td className="p-3"><span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{u.role}</span></td>
+                <td className="p-3">
+                  <button onClick={() => { setEditUser(u); setSelectedRoles([]); }}
+                    className="text-xs text-blue-600 hover:text-blue-800">Seteaza Roluri</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-800">Utilizator nou</h3>
+              <button onClick={() => setShowAddUser(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Nume complet</label>
+                <input value={newUserForm.fullName} onChange={e => setNewUserForm(p => ({...p, fullName: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ex: Ion Popescu" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                <input type="email" value={newUserForm.email} onChange={e => setNewUserForm(p => ({...p, email: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ex: ion.popescu@firma.ro" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Parola</label>
+                <input type="password" value={newUserForm.password} onChange={e => setNewUserForm(p => ({...p, password: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Minim 6 caractere" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Rol</label>
+                <select value={newUserForm.role} onChange={e => setNewUserForm(p => ({...p, role: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="operator">Operator</option>
+                  <option value="production_manager">Manager productie</option>
+                  <option value="admin">Administrator</option>
+                  <option value="viewer">Vizualizare</option>
+                </select>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-xs font-medium text-slate-500">Cont activ</span>
+                  <button
+                    type="button"
+                    onClick={() => setNewUserForm(p => ({...p, is_active: !p.is_active}))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${newUserForm.is_active ? 'bg-blue-600' : 'bg-slate-200'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${newUserForm.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => createUser.mutate({ email: newUserForm.email, password: newUserForm.password, fullName: newUserForm.fullName, role: newUserForm.role })}
+                disabled={createUser.isPending || !newUserForm.email || !newUserForm.password || !newUserForm.fullName}
+                className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {createUser.isPending ? 'Se creeaza...' : 'Creeaza utilizator'}
+              </button>
+              <button onClick={() => setShowAddUser(false)} className="flex-1 py-2 bg-slate-100 text-slate-700 text-sm rounded-lg hover:bg-slate-200">Anuleaza</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h3 className="font-bold mb-4">Roluri pentru {editUser.full_name}</h3>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-slate-800">Seteaza roluri</h3>
+              <button onClick={() => setEditUser(null)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Selecteaza rolurile pentru {editUser.full_name}:</p>
+            <div className="space-y-3 max-h-60 overflow-y-auto">
               {roles.map(r => (
-                <label key={r.id} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={selectedRoles.includes(r.id)} onChange={e => setSelectedRoles(prev => e.target.checked ? [...prev, r.id] : prev.filter(x => x !== r.id))} />
-                  <span className="text-sm">{r.name}</span>
-                  {r.is_predefined && <span className="text-xs text-slate-400">(sistem)</span>}
+                <label key={r.id} className="flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-50">
+                  <input type="checkbox" className="mt-0.5" checked={selectedRoles.includes(r.id)} onChange={e => setSelectedRoles(prev => e.target.checked ? [...prev, r.id] : prev.filter(x => x !== r.id))} />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-800">{r.name}</span>
+                      {r.is_predefined && <span className="text-xs text-slate-400">(sistem)</span>}
+                    </div>
+                    {r.description && <p className="text-xs text-slate-400 mt-0.5">{r.description}</p>}
+                  </div>
                 </label>
               ))}
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setRoles.mutate({ userId: editUser.id, roleIds: selectedRoles })} className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg">Salveaza</button>
-              <button onClick={() => setEditUser(null)} className="flex-1 py-2 bg-slate-100 text-slate-700 text-sm rounded-lg">Anuleaza</button>
+              <button onClick={() => setRoles.mutate({ userId: editUser.id, roleIds: selectedRoles })} disabled={setRoles.isPending} className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {setRoles.isPending ? 'Se salveaza...' : 'Salveaza'}
+              </button>
+              <button onClick={() => setEditUser(null)} className="flex-1 py-2 bg-slate-100 text-slate-700 text-sm rounded-lg hover:bg-slate-200">Anuleaza</button>
             </div>
           </div>
         </div>
@@ -400,13 +494,14 @@ function UsersAdminTab() {
 function SettingsTab() {
   const qc = useQueryClient();
   const { data: settings, isLoading } = useQuery({ queryKey: ['admin-settings'], queryFn: () => api('/settings') });
-  const { data: timezones = [] } = useQuery({ queryKey: ['admin-timezones'], queryFn: () => api('/settings/timezones') });
+  const { data: timezones = [] } = useQuery({ queryKey: ['admin-timezones-settings'], queryFn: () => api('/settings/timezones') });
   const [form, setForm] = useState(null);
 
-  // Initialise form when data loads
-  if (settings && !form) {
-    // Using a trick: this will be called during render, which is OK since it's conditional
-  }
+  // Auto-populate form when settings data loads
+  useEffect(() => {
+    if (settings && !form) setForm({ ...settings });
+  }, [settings]);
+
   const current = form || settings || {};
   const set = (key, val) => setForm(prev => ({ ...(prev || settings || {}), [key]: val }));
 
@@ -414,7 +509,7 @@ function SettingsTab() {
     mutationFn: data => httpClient.put('/admin/settings', data).then(r => r.data),
     onSuccess: (data) => {
       qc.setQueryData(['admin-settings'], data);
-      setForm(null);
+      setForm({ ...data });
       toast.success('Setari salvate.');
     },
     onError: e => toast.error(e.response?.data?.message || 'Eroare'),

@@ -126,7 +126,12 @@ function NewShipmentModal({ onClose }) {
       toast.success('Expeditie creata.')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la creare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'Eroare la creare. Incercati din nou.');
+    },
   })
 
   function submit() {
@@ -241,7 +246,13 @@ function AddPackageModal({ shipmentId, onClose, onSuccess }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post(`/shipments/${shipmentId}/packages`, data),
     onSuccess: () => { toast.success('Colet adaugat.'); onSuccess?.(); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function submit() {
@@ -322,7 +333,13 @@ function ShipmentDetailModal({ shipmentId, onClose }) {
       refetch()
       toast.success('Expeditia a fost expediata.')
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deliverMutation = useMutation({
@@ -334,7 +351,13 @@ function ShipmentDetailModal({ shipmentId, onClose }) {
       refetch()
       toast.success('Livrare confirmata.')
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const cancelMutation = useMutation({
@@ -344,7 +367,13 @@ function ShipmentDetailModal({ shipmentId, onClose }) {
       refetch()
       toast.success('Expeditia a fost anulata.')
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   if (isLoading) return (

@@ -46,6 +46,7 @@ import QualityPage from './pages/QualityPage'
 import DocumentsPage from './pages/DocumentsPage'
 import SupplierScorecardPage from './pages/SupplierScorecardPage'
 import IntegrationsPage from './pages/IntegrationsPage'
+import ClientOrdersPage from './pages/ClientOrdersPage'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } })
 
@@ -104,6 +105,7 @@ function AppRoutes() {
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/supplier-scorecard" element={<SupplierScorecardPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
+              <Route path="/client-orders" element={<ClientOrdersPage />} />
             </Routes>
           </LayoutComponent>
         </PrivateRoute>

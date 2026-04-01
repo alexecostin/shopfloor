@@ -95,7 +95,13 @@ function TemplateModal({ template, onClose }) {
       toast.success(isEdit ? 'Template actualizat.' : 'Template creat.')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function submit() {
@@ -204,7 +210,7 @@ function ExportModal({ template, onClose }) {
       toast.success(`Export finalizat: ${result.rowCount} randuri`)
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la export.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la export. Incercati din nou.'); },
   })
 
   return (
@@ -265,7 +271,13 @@ function WebhookModal({ webhook, onClose }) {
       toast.success(isEdit ? 'Webhook actualizat.' : 'Webhook creat.')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function submit() {
@@ -340,7 +352,13 @@ function ExportTab() {
       qc.invalidateQueries({ queryKey: ['integration-templates'] })
       toast.success('Template sters.')
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const list = templates || []
@@ -511,7 +529,13 @@ function WebhooksTab() {
       qc.invalidateQueries({ queryKey: ['integration-webhooks'] })
       toast.success('Stare actualizata.')
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const testMut = useMutation({
@@ -522,7 +546,7 @@ function WebhooksTab() {
       if (r.success) toast.success(`Test reusit (status: ${r.status})`)
       else toast.error(`Test esuat: ${r.error || `status ${r.status}`}`)
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la test.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la test webhook. Verificati URL-ul si incercati din nou.'); },
   })
 
   const deleteMut = useMutation({
@@ -531,7 +555,13 @@ function WebhooksTab() {
       qc.invalidateQueries({ queryKey: ['integration-webhooks'] })
       toast.success('Webhook sters.')
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const list = webhooks || []

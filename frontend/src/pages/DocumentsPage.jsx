@@ -99,7 +99,12 @@ function NewDocumentModal({ onClose }) {
       toast.success('Document creat cu succes.')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la creare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'Eroare la creare. Incercati din nou.');
+    },
   })
 
   function submit() {
@@ -170,7 +175,10 @@ function UploadRevisionModal({ documentId, onClose, onSuccess }) {
       onSuccess?.()
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la incarcare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      toast.error(msg || 'Eroare la incarcare. Verificati fisierul si incercati din nou.');
+    },
   })
 
   function submit() {
@@ -231,7 +239,7 @@ function LinkEntityModal({ documentId, onClose, onSuccess }) {
       onSuccess?.()
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la legare.'),
+    onError: (e) => { const msg = e.response?.data?.message || ''; toast.error(msg || 'Eroare la legare. Incercati din nou.'); },
   })
 
   function submit() {

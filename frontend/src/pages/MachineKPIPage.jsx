@@ -167,6 +167,7 @@ export default function MachineKPIPage() {
       {/* Machine selector */}
       {!compareMode ? (
         <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Selecteaza utilajul pentru analiza KPI</label>
           <select
             value={machineId}
             onChange={e => setMachineId(e.target.value)}

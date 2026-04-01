@@ -1,4 +1,5 @@
 import * as svc from './bom.service.js';
+import * as templateSvc from '../../services/operation-templates.service.js';
 
 export const getProducts = async (req, res, next) => {
   try {
@@ -192,5 +193,36 @@ export const validateMBOM = async (req, res, next) => {
     const product = await svc.validateMBOM(req.params.productId);
     if (!product) return res.status(404).json({ message: 'Produs negasit.' });
     res.json(product);
+  } catch (e) { next(e); }
+};
+
+// ─── Copy MBOM ──────────────────────────────────────────────────────────────
+
+export const copyMBOM = async (req, res, next) => {
+  try {
+    const result = await svc.copyMBOMFromProduct(req.params.sourceId, req.params.targetId);
+    res.json(result);
+  } catch (e) { next(e); }
+};
+
+// ─── Operation Templates ────────────────────────────────────────────────────
+
+export const getTemplates = async (req, res, next) => {
+  try {
+    res.json(await templateSvc.listTemplates(req.user?.tenantId));
+  } catch (e) { next(e); }
+};
+
+export const postTemplate = async (req, res, next) => {
+  try {
+    const tpl = await templateSvc.createTemplate(req.body, req.user?.tenantId);
+    res.status(201).json(tpl);
+  } catch (e) { next(e); }
+};
+
+export const deleteTemplate = async (req, res, next) => {
+  try {
+    await templateSvc.deleteTemplate(req.params.id);
+    res.json({ message: 'Template sters.' });
   } catch (e) { next(e); }
 };

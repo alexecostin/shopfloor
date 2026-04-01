@@ -102,25 +102,49 @@ function ConfigsTab() {
   const createMut = useMutation({
     mutationFn: data => api.post('/scheduling/configs', data),
     onSuccess: () => { qc.invalidateQueries(['scheduling-configs']); closeForm(); toast.success('Configuratie creata.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...data }) => api.put(`/scheduling/configs/${id}`, data),
     onSuccess: () => { qc.invalidateQueries(['scheduling-configs']); closeForm(); toast.success('Configuratie actualizata.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteMut = useMutation({
     mutationFn: id => api.delete(`/scheduling/configs/${id}`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-configs']); toast.success('Sters.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const setDefaultMut = useMutation({
     mutationFn: id => api.put(`/scheduling/configs/${id}/set-default`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-configs']); toast.success('Setat ca implicit.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   function closeForm() { setShowForm(false); setEditing(null); setForm({ name: '', description: '', priorities: [...DEFAULT_PRIORITIES], constraints: { ...DEFAULT_CONSTRAINTS } }) }
@@ -197,7 +221,7 @@ function ConfigsTab() {
                 </td>
                 <td className="px-4 py-3 text-right flex gap-2 justify-end">
                   <button onClick={() => openEdit(cfg)} className="text-slate-400 hover:text-blue-500"><Edit2 size={14} /></button>
-                  <button onClick={() => { if (confirm('Stergi configuratia?')) deleteMut.mutate(cfg.id) }} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button>
+                  <button onClick={() => { if (confirm('Sigur doriti sa stergeti? Aceasta actiune este ireversibila.')) deleteMut.mutate(cfg.id) }} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button>
                 </td>
               </tr>
             ))}
@@ -328,13 +352,25 @@ function RunsTab() {
   const deleteMut = useMutation({
     mutationFn: id => api.delete(`/scheduling/runs/${id}`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-runs']); setSelectedRun(null); toast.success('Executie stearsa.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const applyMut = useMutation({
     mutationFn: id => api.post(`/scheduling/runs/${id}/apply`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-runs']); toast.success('Planificare aplicata cu succes!') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const statusColor = {
@@ -564,19 +600,37 @@ function SimulationsTab() {
   const createMut = useMutation({
     mutationFn: data => api.post('/scheduling/simulations', data),
     onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); setShowCreate(false); setSimForm({ name: '', description: '', scenario_params: '' }); toast.success('Simulare creata.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteMut = useMutation({
     mutationFn: id => api.delete(`/scheduling/simulations/${id}`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); setSelectedSim(null); toast.success('Simulare stearsa.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const applyMut = useMutation({
     mutationFn: id => api.post(`/scheduling/simulations/${id}/apply`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); toast.success('Simulare aplicata cu succes!') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (

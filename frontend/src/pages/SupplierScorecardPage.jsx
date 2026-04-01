@@ -182,7 +182,12 @@ function DetailModal({ supplier, dateFrom, dateTo, onClose }) {
       qc.invalidateQueries({ queryKey: ['supplier-scorecard', supplier.id] })
       qc.invalidateQueries({ queryKey: ['supplier-ranking'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const d = detail || supplier
@@ -257,7 +262,7 @@ function DetailModal({ supplier, dateFrom, dateTo, onClose }) {
               <h4 className="text-sm font-semibold text-slate-700 mb-3">Evalueaza reactivitate</h4>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Scor (0-100)</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Scor reactivitate (0-100) *</label>
                   <input
                     type="number"
                     min={0}
@@ -268,7 +273,8 @@ function DetailModal({ supplier, dateFrom, dateTo, onClose }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Note / Observatii</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Note / Observatii</label>
+                  <p className="text-[11px] text-slate-400 mb-1">Descrieti motivul scorului acordat (timp de raspuns, flexibilitate, comunicare)</p>
                   <textarea
                     className="input w-full"
                     rows={2}

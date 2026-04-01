@@ -48,6 +48,13 @@ export async function createWorkOrder(data, userId) {
     product_reference: data.productReference || null,
     product_name: data.productName || null,
     client_id: data.clientId || null,
+    client_contact_id: data.clientContactId || null,
+    unit_price: data.unitPrice || null,
+    currency: data.currency || 'RON',
+    total_value: data.unitPrice && data.quantity ? Number(data.unitPrice) * Number(data.quantity) : null,
+    incoterms: data.incoterms || null,
+    delivery_address: data.deliveryAddress || null,
+    payment_terms: data.paymentTerms || null,
     quantity: data.quantity,
     priority: data.priority || 'normal',
     scheduled_start: data.scheduledStart || null,
@@ -128,6 +135,9 @@ export async function updateWorkOrder(id, data, tenantId) {
   const map = {
     status: 'status', priority: 'priority', scheduledStart: 'scheduled_start',
     scheduledEnd: 'scheduled_end', notes: 'notes', quantity: 'quantity',
+    clientContactId: 'client_contact_id', unitPrice: 'unit_price', currency: 'currency',
+    incoterms: 'incoterms', deliveryAddress: 'delivery_address', paymentTerms: 'payment_terms',
+    technicalCheckStatus: 'technical_check_status', materialStatus: 'material_status',
   };
   for (const [k, v] of Object.entries(map)) {
     if (data[k] !== undefined) row[v] = data[k];
@@ -321,4 +331,66 @@ export async function createHrRate(data) {
   }).returning('*');
   const rate = Array.isArray(rows) ? rows[0] : rows;
   return rate;
+}
+
+// ─── Technical Checks ────────────────────────────────────────────────────────
+
+export async function getTechnicalChecks(workOrderId) {
+  let checks = await db('production.technical_checks').where('work_order_id', workOrderId).orderBy('created_at');
+  if (checks.length === 0) {
+    const defaults = [
+      'Desene tehnice complete si verificate',
+      'Tolerante si specificatii clare',
+      'Material specificat si disponibil',
+      'MBOM definit si validat',
+      'Capacitate productie verificata',
+      'Scule necesare disponibile',
+    ];
+    for (const item of defaults) {
+      await db('production.technical_checks').insert({ work_order_id: workOrderId, check_item: item });
+    }
+    checks = await db('production.technical_checks').where('work_order_id', workOrderId).orderBy('created_at');
+  }
+  return checks;
+}
+
+export async function updateTechnicalCheck(checkId, { isPassed, notes, userId }) {
+  const [check] = await db('production.technical_checks').where('id', checkId)
+    .update({ is_passed: isPassed, notes, checked_by: userId, checked_at: isPassed ? new Date() : null })
+    .returning('*');
+  return check;
+}
+
+// ─── Material Status ─────────────────────────────────────────────────────────
+
+export async function getMaterialStatus(workOrderId) {
+  const wo = await db('production.work_orders').where('id', workOrderId).first();
+  if (!wo) return [];
+  const product = wo.product_id
+    ? await db('bom.products').where('id', wo.product_id).first()
+    : await db('bom.products').where('reference', wo.product_reference).first();
+  if (!product) return [];
+  const materials = await db('bom.materials').where('product_id', product.id);
+  const results = [];
+  for (const mat of materials) {
+    const item = await db('inventory.items').where('code', mat.material_code).orWhere('name', 'ilike', `%${mat.material_name}%`).first();
+    const stockLevel = item ? await db('inventory.stock_levels').where('item_id', item.id).first() : null;
+    const qtyNeeded = (mat.qty_per_piece || 1) * (wo.quantity || 1) * (mat.waste_factor || 1);
+    const qtyAvailable = Number(stockLevel?.current_qty) || 0;
+    results.push({
+      materialName: mat.material_name, materialCode: mat.material_code,
+      qtyNeeded: Math.ceil(qtyNeeded), unit: mat.unit, qtyAvailable,
+      status: qtyAvailable >= qtyNeeded ? 'available' : qtyAvailable > 0 ? 'partial' : 'missing',
+    });
+  }
+  return results;
+}
+
+// ─── Launch to Production ────────────────────────────────────────────────────
+
+export async function launchToProduction(workOrderId, userId) {
+  const [wo] = await db('production.work_orders').where('id', workOrderId)
+    .update({ status: 'released', launched_at: new Date(), launched_by: userId, technical_check_status: 'passed' })
+    .returning('*');
+  return Array.isArray(wo) ? wo[0] || wo : wo;
 }

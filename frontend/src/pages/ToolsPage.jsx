@@ -36,7 +36,13 @@ function CalibrateModal({ tool, onClose }) {
       toast.success('Calibrare inregistrata.')
       onClose()
     },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -162,22 +168,44 @@ function AddToolModal({ onClose }) {
   const mut = useMutation({
     mutationFn: d => api.post('/tools', d),
     onSuccess: () => { qc.invalidateQueries(['tools']); qc.invalidateQueries(['calibration-dashboard']); toast.success('Scula adaugata.'); onClose() },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">Adauga Scula</h3>
         <div className="space-y-3">
-          <input className="input" placeholder="Cod *" value={form.code} onChange={f('code')} />
-          <input className="input" placeholder="Nume *" value={form.name} onChange={f('name')} />
-          <input className="input" placeholder="Tip" value={form.type} onChange={f('type')} />
-          <select className="input" value={form.tracking_mode} onChange={f('tracking_mode')}>
-            <option value="tracked">Tracked</option>
-            <option value="consumable">Consumabil</option>
-            <option value="measurement_instrument">Instrument Masura</option>
-          </select>
-          <input className="input" type="number" placeholder="Interval mentenanta (cicluri)" value={form.maintenance_interval_cycles} onChange={f('maintenance_interval_cycles')} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Cod scula *</label>
+            <input className="input" placeholder="Ex: FREZA-001" value={form.code} onChange={f('code')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Denumire *</label>
+            <input className="input" placeholder="Ex: Freza cilindrica D10" value={form.name} onChange={f('name')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip</label>
+            <input className="input" placeholder="Ex: Freza, Burghiu, Placuta" value={form.type} onChange={f('type')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Mod urmarire</label>
+            <select className="input" value={form.tracking_mode} onChange={f('tracking_mode')}>
+              <option value="tracked">Tracked</option>
+              <option value="consumable">Consumabil</option>
+              <option value="measurement_instrument">Instrument Masura</option>
+            </select>
+            <p className="text-[11px] text-slate-400 mt-0.5">Tracked = scula cu cicluri, Consumabil = inlocuibil periodic, Instrument = necesita calibrare</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Interval mentenanta (cicluri)</label>
+            <input className="input" type="number" placeholder="Ex: 5000" value={form.maintenance_interval_cycles} onChange={f('maintenance_interval_cycles')} />
+          </div>
           {form.tracking_mode === 'measurement_instrument' && (
             <>
               <input className="input" type="number" placeholder="Interval calibrare (luni) *" min="1" value={form.calibration_interval_months} onChange={f('calibration_interval_months')} />
@@ -216,7 +244,13 @@ function EditToolModal({ tool, onClose }) {
   const mut = useMutation({
     mutationFn: d => api.put(`/tools/${tool.id}`, d),
     onSuccess: () => { qc.invalidateQueries(['tools']); qc.invalidateQueries(['tool', tool.id]); qc.invalidateQueries(['calibration-dashboard']); toast.success('Scula actualizata.'); onClose() },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -224,15 +258,30 @@ function EditToolModal({ tool, onClose }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">Editeaza Scula</h3>
         <div className="space-y-3">
-          <input className="input" placeholder="Cod *" value={form.code} onChange={f('code')} />
-          <input className="input" placeholder="Nume *" value={form.name} onChange={f('name')} />
-          <input className="input" placeholder="Tip" value={form.type} onChange={f('type')} />
-          <select className="input" value={form.tracking_mode} onChange={f('tracking_mode')}>
-            <option value="tracked">Tracked</option>
-            <option value="consumable">Consumabil</option>
-            <option value="measurement_instrument">Instrument Masura</option>
-          </select>
-          <input className="input" type="number" placeholder="Interval mentenanta (cicluri)" value={form.maintenance_interval_cycles} onChange={f('maintenance_interval_cycles')} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Cod scula *</label>
+            <input className="input" placeholder="Cod" value={form.code} onChange={f('code')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Denumire *</label>
+            <input className="input" placeholder="Denumire scula" value={form.name} onChange={f('name')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip</label>
+            <input className="input" placeholder="Ex: Freza, Burghiu" value={form.type} onChange={f('type')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Mod urmarire</label>
+            <select className="input" value={form.tracking_mode} onChange={f('tracking_mode')}>
+              <option value="tracked">Tracked</option>
+              <option value="consumable">Consumabil</option>
+              <option value="measurement_instrument">Instrument Masura</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Interval mentenanta (cicluri)</label>
+            <input className="input" type="number" placeholder="Ex: 5000" value={form.maintenance_interval_cycles} onChange={f('maintenance_interval_cycles')} />
+          </div>
           {form.tracking_mode === 'measurement_instrument' && (
             <>
               <input className="input" type="number" placeholder="Interval calibrare (luni) *" min="1" value={form.calibration_interval_months} onChange={f('calibration_interval_months')} />
@@ -270,25 +319,49 @@ function ToolDetail({ tool, onClose }) {
   const assignMut = useMutation({
     mutationFn: ({ machineId }) => api.post(`/tools/${tool.id}/assign`, { machine_id: machineId }),
     onSuccess: () => { qc.invalidateQueries(['tools']); qc.invalidateQueries(['tool', tool.id]); toast.success('Asignat.'); setAssignMachine(false) },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const maintMut = useMutation({
     mutationFn: d => api.post(`/tools/${tool.id}/maintenance`, d),
     onSuccess: () => { qc.invalidateQueries(['tool', tool.id]); toast.success('Mentenanta adaugata.'); setMaintenanceForm({ type: '', description: '', cost: '' }) },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const cyclesMut = useMutation({
     mutationFn: cycles => api.put(`/tools/${tool.id}/cycles`, { cycles }),
     onSuccess: () => { qc.invalidateQueries(['tools']); qc.invalidateQueries(['tool', tool.id]); toast.success('Cicluri actualizate.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteMut = useMutation({
     mutationFn: () => api.delete(`/tools/${tool.id}`),
     onSuccess: () => { qc.invalidateQueries(['tools']); toast.success('Scula stearsa.'); onClose() },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const machineList = machines?.data || machines || []
@@ -301,7 +374,7 @@ function ToolDetail({ tool, onClose }) {
           <h3 className="font-semibold text-slate-800">{t.name} <span className="text-slate-400 text-sm">({t.code})</span></h3>
           <div className="flex items-center gap-2">
             <button onClick={() => setEditMode(true)} className="text-slate-400 hover:text-blue-500" title="Editeaza"><Pencil size={16} /></button>
-            <button onClick={() => { if (confirm('Stergi scula?')) deleteMut.mutate() }} className="text-slate-400 hover:text-red-500" title="Sterge"><Trash2 size={16} /></button>
+            <button onClick={() => { if (confirm('Sigur doriti sa stergeti? Aceasta actiune este ireversibila.')) deleteMut.mutate() }} className="text-slate-400 hover:text-red-500" title="Sterge"><Trash2 size={16} /></button>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
           </div>
         </div>
@@ -343,9 +416,18 @@ function ToolDetail({ tool, onClose }) {
 
         <div className="bg-slate-50 rounded p-3 mb-3 space-y-2">
           <p className="text-xs font-medium text-slate-600">Adauga Mentenanta</p>
-          <input className="input text-sm" placeholder="Tip" value={maintenanceForm.type} onChange={mf('type')} />
-          <input className="input text-sm" placeholder="Descriere" value={maintenanceForm.description} onChange={mf('description')} />
-          <input className="input text-sm" type="number" placeholder="Cost" value={maintenanceForm.cost} onChange={mf('cost')} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip mentenanta *</label>
+            <input className="input text-sm" placeholder="Ex: Inlocuire, Reascutire" value={maintenanceForm.type} onChange={mf('type')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere</label>
+            <input className="input text-sm" placeholder="Detalii mentenanta" value={maintenanceForm.description} onChange={mf('description')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Cost (RON)</label>
+            <input className="input text-sm" type="number" placeholder="Ex: 50" value={maintenanceForm.cost} onChange={mf('cost')} />
+          </div>
           <button onClick={() => maintMut.mutate(maintenanceForm)} disabled={!maintenanceForm.type || maintMut.isPending} className="btn-primary text-xs py-1">Salveaza</button>
         </div>
 
@@ -401,7 +483,13 @@ export default function ToolsPage() {
   const deleteToolMut = useMutation({
     mutationFn: (id) => api.delete(`/tools/${id}`),
     onSuccess: () => { qc.invalidateQueries(['tools']); qc.invalidateQueries(['calibration-dashboard']); toast.success('Scula stearsa.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const rawToolList = tools?.data || tools || []
@@ -502,7 +590,7 @@ export default function ToolsPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={(e) => { e.stopPropagation(); if (confirm('Stergi scula?')) deleteToolMut.mutate(t.id) }}
+                            onClick={(e) => { e.stopPropagation(); if (confirm('Sigur doriti sa stergeti? Aceasta actiune este ireversibila.')) deleteToolMut.mutate(t.id) }}
                             className="text-slate-400 hover:text-red-500"
                             title="Sterge"
                           >

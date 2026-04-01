@@ -30,7 +30,13 @@ function CreateRuleModal({ onClose }) {
   const mut = useMutation({
     mutationFn: d => api.post('/alerts/rules', d),
     onSuccess: () => { qc.invalidateQueries(['alert-rules']); toast.success('Regula creata.'); onClose() },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   return (
@@ -41,8 +47,14 @@ function CreateRuleModal({ onClose }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
         <div className="space-y-3">
-          <input className="input w-full" placeholder="Nume regula *" value={form.name} onChange={f('name')} />
-          <textarea className="input w-full" rows={2} placeholder="Descriere" value={form.description} onChange={f('description')} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nume regula *</label>
+            <input className="input w-full" placeholder="Ex: Stoc minim atins" value={form.name} onChange={f('name')} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere</label>
+            <textarea className="input w-full" rows={2} placeholder="Descrieti scopul regulii" value={form.description} onChange={f('description')} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 mb-1 block">Tip regula</label>
@@ -97,13 +109,25 @@ function RuleDetailModal({ rule, onClose }) {
   const addChannel = useMutation({
     mutationFn: d => api.post(`/alerts/rules/${rule.id}/channels`, d),
     onSuccess: () => { qc.invalidateQueries(['rule-channels', rule.id]); toast.success('Canal adaugat.'); setChannelTarget('') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const removeChannel = useMutation({
     mutationFn: id => api.delete(`/alerts/channels/${id}`),
     onSuccess: () => { qc.invalidateQueries(['rule-channels', rule.id]); toast.success('Canal sters.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const channels = channelsData?.data || channelsData || []
@@ -202,31 +226,61 @@ export default function AlertsPage() {
   const ackMut = useMutation({
     mutationFn: id => api.put(`/alerts/${id}/acknowledge`),
     onSuccess: () => { qc.invalidateQueries(['alerts']); qc.invalidateQueries(['alert-count']); toast.success('Marcat vazut.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const resolveMut = useMutation({
     mutationFn: id => api.put(`/alerts/${id}/resolve`),
     onSuccess: () => { qc.invalidateQueries(['alerts']); qc.invalidateQueries(['alert-count']); toast.success('Rezolvat.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const toggleRuleMut = useMutation({
     mutationFn: ({ id, is_active }) => api.put(`/alerts/rules/${id}`, { is_active }),
     onSuccess: () => { qc.invalidateQueries(['alert-rules']); toast.success('Regula actualizata.') },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const deleteRuleMut = useMutation({
     mutationFn: id => api.delete(`/alerts/rules/${id}`),
     onSuccess: () => { qc.invalidateQueries(['alert-rules']); toast.success('Regula stearsa.'); setDeleteConfirm(null) },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const checkMut = useMutation({
     mutationFn: () => api.post('/alerts/check'),
     onSuccess: data => { qc.invalidateQueries(['alerts']); qc.invalidateQueries(['alert-count']); toast.success(`Verificare finalizata: ${data?.data?.triggered || 0} alerte noi.`) },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onError: (e) => {
+      const msg = e.response?.data?.message || '';
+      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
+      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
+    },
   })
 
   const alerts = alertsData?.data || alertsData || []
@@ -301,7 +355,11 @@ export default function AlertsPage() {
                     </tr>
                   ))}
                   {alerts.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nicio alerta activa.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-12 text-center">
+                      <Bell size={40} className="mx-auto text-slate-300 mb-3" />
+                      <p className="text-slate-500 font-medium">Nicio alerta activa</p>
+                      <p className="text-slate-400 text-sm mt-1">Totul functioneaza normal. Alertele vor aparea automat cand o regula este declansata.</p>
+                    </td></tr>
                   )}
                 </tbody>
               </table>
@@ -361,7 +419,11 @@ export default function AlertsPage() {
                       </td>
                     </tr>
                   ))}
-                  {rules.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nicio regula.</td></tr>}
+                  {rules.length === 0 && <tr><td colSpan={5} className="px-4 py-12 text-center">
+                    <BellRing size={40} className="mx-auto text-slate-300 mb-3" />
+                    <p className="text-slate-500 font-medium">Nicio regula</p>
+                    <p className="text-slate-400 text-sm mt-1">Apasa "Regula noua" pentru a configura alerte automate.</p>
+                  </td></tr>}
                 </tbody>
               </table>
             </div>
