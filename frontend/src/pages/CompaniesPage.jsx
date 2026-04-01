@@ -73,16 +73,34 @@ function CompanyModal({ onClose, editCompany }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza companie' : 'Companie noua'}</h3>
         <div className="space-y-3">
-          <input className="input" placeholder="Denumire *" value={form.name} onChange={f('name')} />
-          <select className="input" value={form.companyType} onChange={f('companyType')}>
-            {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <div className="grid grid-cols-2 gap-3">
-            <input className="input" placeholder="CIF" value={form.fiscalCode} onChange={f('fiscalCode')} />
-            <input className="input" placeholder="Oras" value={form.city} onChange={f('city')} />
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Denumire companie *</label>
+            <input className="input" placeholder="Ex: SC Exemplu SRL" value={form.name} onChange={f('name')} />
           </div>
-          <input className="input" placeholder="Telefon" value={form.phone} onChange={f('phone')} />
-          <input className="input" type="email" placeholder="Email" value={form.email} onChange={f('email')} />
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Tip companie - selecteaza relatia cu aceasta companie</label>
+            <select className="input" value={form.companyType} onChange={f('companyType')}>
+              {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">CIF / Cod fiscal</label>
+              <input className="input" placeholder="Ex: RO12345678" value={form.fiscalCode} onChange={f('fiscalCode')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Oras</label>
+              <input className="input" placeholder="Ex: Cluj-Napoca" value={form.city} onChange={f('city')} />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Telefon</label>
+            <input className="input" placeholder="Ex: 0740123456" value={form.phone} onChange={f('phone')} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Email</label>
+            <input className="input" type="email" placeholder="Ex: contact@exemplu.ro" value={form.email} onChange={f('email')} />
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>

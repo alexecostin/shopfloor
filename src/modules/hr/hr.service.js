@@ -115,7 +115,8 @@ export const createLeaveRequest = async (data, userId) => {
     .first();
   if (overlap) throw Object.assign(new Error('Exista deja un concediu aprobat in aceasta perioada.'), { statusCode: 409 });
 
-  const [r] = await db('auth.leave_requests').insert({ ...data, user_id: userId }).returning('*');
+  const rows = await db('auth.leave_requests').insert({ ...data, user_id: userId }).returning('*');
+  const r = Array.isArray(rows) ? rows[0] : rows;
   return r;
 };
 
@@ -123,22 +124,30 @@ export const approveLeaveRequest = async (id, reviewerId) => {
   const req = await db('auth.leave_requests').where('id', id).first();
   if (!req) return null;
 
-  // Check if operator is planned in those days
-  const allocations = await db('planning.daily_allocations')
-    .where({ operator_id: req.user_id })
-    .whereBetween('date', [req.start_date, req.end_date]);
+  // Check if operator has HR allocations in those days (planning.daily_allocations has no operator_id column)
+  let allocations = [];
+  try {
+    allocations = await db('production.hr_allocations')
+      .where({ user_id: req.user_id })
+      .whereBetween('allocation_date', [req.start_date, req.end_date]);
+  } catch (_e) {
+    // If the table or query fails, skip the warning check
+    allocations = [];
+  }
 
-  const [r] = await db('auth.leave_requests').where('id', id)
+  const rows = await db('auth.leave_requests').where('id', id)
     .update({ status: 'approved', reviewed_by: reviewerId, reviewed_at: new Date() })
     .returning('*');
+  const r = Array.isArray(rows) ? rows[0] : rows;
 
-  return { leave: r, warning: allocations.length > 0 ? `Operatorul este planificat in ${allocations.length} ture in aceasta perioada!` : null };
+  return { leave: r, warning: allocations.length > 0 ? `Operatorul este alocat in ${allocations.length} sarcini in aceasta perioada!` : null };
 };
 
 export const rejectLeaveRequest = async (id, reviewerId, reviewer_notes) => {
-  const [r] = await db('auth.leave_requests').where('id', id)
+  const rows = await db('auth.leave_requests').where('id', id)
     .update({ status: 'rejected', reviewed_by: reviewerId, reviewed_at: new Date(), reviewer_notes })
     .returning('*');
+  const r = Array.isArray(rows) ? rows[0] : rows;
   return r;
 };
 

@@ -4,6 +4,7 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { Plus, Pencil, Search, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useLookup, getLookupLabel } from '../hooks/useLookup'
 
 const STATUS_COLORS = { pending: 'bg-slate-100 text-slate-600', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' }
 
@@ -27,19 +28,31 @@ function AddSkillModal({ onClose }) {
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">Adauga Skill</h3>
         <div className="space-y-3">
-          <select className="input" value={form.user_id} onChange={f('user_id')}>
-            <option value="">Selecteaza operator</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-          </select>
-          <select className="input" value={form.machine_id} onChange={f('machine_id')}>
-            <option value="">Selecteaza masina</option>
-            {machineList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <select className="input" value={form.skill_level_id} onChange={f('skill_level_id')}>
-            <option value="">Selecteaza nivel</option>
-            {levelList.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <input className="input" type="date" value={form.certified_at} onChange={f('certified_at')} placeholder="Data certificare" />
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Operator * - selecteaza angajatul</label>
+            <select className="input" value={form.user_id} onChange={f('user_id')}>
+              <option value="">Selecteaza operator</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Masina * - selecteaza utilajul</label>
+            <select className="input" value={form.machine_id} onChange={f('machine_id')}>
+              <option value="">Selecteaza masina</option>
+              {machineList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Nivel competenta - nivelul de calificare</label>
+            <select className="input" value={form.skill_level_id} onChange={f('skill_level_id')}>
+              <option value="">Selecteaza nivel</option>
+              {levelList.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Data certificare - cand a obtinut certificarea</label>
+            <input className="input" type="date" value={form.certified_at} onChange={f('certified_at')} />
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -52,29 +65,51 @@ function AddSkillModal({ onClose }) {
   )
 }
 
+const FALLBACK_LEAVE_TYPES = [
+  { code: 'annual', display_name: 'Concediu anual' },
+  { code: 'sick', display_name: 'Concediu medical' },
+  { code: 'unpaid', display_name: 'Concediu fara plata' },
+  { code: 'other', display_name: 'Altul' },
+]
+
 function LeaveModal({ onClose }) {
   const qc = useQueryClient()
+  const { values: lookupLeaveTypes, loading: lookupLoading } = useLookup('leave_types')
+  const leaveTypes = lookupLeaveTypes && lookupLeaveTypes.length > 0 ? lookupLeaveTypes : FALLBACK_LEAVE_TYPES
   const [form, setForm] = useState({ leave_type: 'annual', start_date: '', end_date: '', reason: '' })
   const f = k => e => setForm({ ...form, [k]: e.target.value })
   const mut = useMutation({
     mutationFn: d => api.post('/hr/leave', d),
-    onSuccess: () => { qc.invalidateQueries(['leave']); toast.success('Cerere trimisa.'); onClose() },
-    onError: e => toast.error(e.response?.data?.message || 'Eroare.'),
+    onSuccess: () => { qc.invalidateQueries(['leave']); toast.success('Cerere de concediu trimisa cu succes.'); onClose() },
+    onError: e => toast.error(e.response?.data?.message || 'Eroare la trimiterea cererii de concediu.'),
   })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="font-semibold text-slate-800 mb-4">Cerere Concediu</h3>
         <div className="space-y-3">
-          <select className="input" value={form.leave_type} onChange={f('leave_type')}>
-            <option value="annual">Annual</option>
-            <option value="sick">Medical</option>
-            <option value="unpaid">Fara plata</option>
-            <option value="other">Altul</option>
-          </select>
-          <input className="input" type="date" value={form.start_date} onChange={f('start_date')} />
-          <input className="input" type="date" value={form.end_date} onChange={f('end_date')} />
-          <textarea className="input" rows={3} placeholder="Motiv" value={form.reason} onChange={f('reason')} />
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Tip concediu - selecteaza tipul de concediu dorit</label>
+            <select className="input" value={form.leave_type} onChange={f('leave_type')}>
+              {leaveTypes.map(lt => (
+                <option key={lt.code || lt.id} value={lt.code || lt.value}>
+                  {lt.display_name || getLookupLabel(lt) || lt.code}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Data inceput * - prima zi de concediu</label>
+            <input className="input" type="date" value={form.start_date} onChange={f('start_date')} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Data sfarsit * - ultima zi de concediu</label>
+            <input className="input" type="date" value={form.end_date} onChange={f('end_date')} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Motiv - descrie motivul cererii (optional)</label>
+            <textarea className="input" rows={3} placeholder="Descrie motivul concediului..." value={form.reason} onChange={f('reason')} />
+          </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
@@ -337,7 +372,7 @@ export default function SkillMatrixPage() {
                 <tbody className="divide-y divide-slate-100">
                   {leaveList.map(l => (
                     <tr key={l.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-800">{l.user?.full_name || l.user_id}</td>
+                      <td className="px-4 py-3 text-slate-800">{l.full_name || l.user?.full_name || l.user_id}</td>
                       <td className="px-4 py-3 text-slate-600 capitalize">{l.leave_type}</td>
                       <td className="px-4 py-3 text-slate-500">{l.start_date?.slice(0,10)}</td>
                       <td className="px-4 py-3 text-slate-500">{l.end_date?.slice(0,10)}</td>

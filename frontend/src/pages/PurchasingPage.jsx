@@ -32,8 +32,8 @@ function CreatePOModal({ onClose }) {
 
   const mutation = useMutation({
     mutationFn: (data) => api.post('/purchasing/orders', data),
-    onSuccess: () => { qc.invalidateQueries(['purchasing-orders']); toast.success('PO creat.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onSuccess: () => { qc.invalidateQueries(['purchasing-orders']); toast.success('Comanda de achizitie creata cu succes.'); onClose() },
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la crearea comenzii de achizitie.'),
   })
 
   return (
@@ -105,12 +105,12 @@ function LineModal({ poId, editLine, onClose }) {
         <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza linie' : 'Adauga linie'}</h3>
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Articol</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Articol din inventar - cauta si selecteaza un material existent</label>
             <SearchableSelect
               endpoint="/inventory/items"
               labelField="name"
               valueField="id"
-              placeholder="Selecteaza articol (optional)"
+              placeholder="Cauta articol dupa cod sau denumire..."
               value={form.itemId}
               onChange={(id, item) => setForm(f => ({
                 ...f,
@@ -121,11 +121,23 @@ function LineModal({ poId, editLine, onClose }) {
               allowCreate={false}
             />
           </div>
-          <input className="input" placeholder="Descriere" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere - detalii suplimentare despre articol</label>
+            <input className="input" placeholder="Descriere articol" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
           <div className="grid grid-cols-3 gap-2">
-            <input className="input" type="number" placeholder="Cantitate *" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
-            <input className="input" placeholder="UM" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} />
-            <input className="input" type="number" step="0.01" placeholder="Pret unitar *" value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: e.target.value }))} />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Cantitate *</label>
+              <input className="input" type="number" placeholder="Ex: 100" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Unitate masura</label>
+              <input className="input" placeholder="Ex: buc, kg" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Pret unitar *</label>
+              <input className="input" type="number" step="0.01" placeholder="Ex: 10.50" value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: e.target.value }))} />
+            </div>
           </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">

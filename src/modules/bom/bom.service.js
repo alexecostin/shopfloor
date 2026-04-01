@@ -105,6 +105,12 @@ export async function createOperation(productId, data) {
     attention_points: JSON.stringify(data.attentionPoints || data.attention_points || []),
     min_batch_before_next: data.minBatchBeforeNext || data.min_batch_before_next || null,
     transfer_type: data.transferType || data.transfer_type || null,
+    transport_time_minutes: data.transportTimeMinutes || data.transport_time_minutes || 0,
+    deposit_location: data.depositLocation || data.deposit_location || null,
+    reject_action: data.rejectAction || data.reject_action || 'scrap',
+    time_unit: data.timeUnit || data.time_unit || 'seconds',
+    input_material_id: data.inputMaterialId || data.input_material_id || null,
+    drawing_url: data.drawingUrl || data.drawing_url || null,
   };
   const [op] = await db('bom.operations').insert(row).returning('*');
   return op;
@@ -117,7 +123,9 @@ export async function updateOperation(id, data) {
     'cycle_time_seconds','setup_time_minutes','description','sequence',
     'cnc_program','raw_material_spec','tools_config','machine_parameters',
     'consumables','attention_points','min_batch_before_next','nr_cavities',
-    'pieces_per_hour','transfer_type','is_active'];
+    'pieces_per_hour','transfer_type','is_active',
+    'transport_time_minutes','deposit_location','reject_action','time_unit',
+    'input_material_id','drawing_url'];
   const jsonFields = ['tools_config','machine_parameters','consumables','attention_points'];
 
   for (const f of snakeFields) {
@@ -135,6 +143,9 @@ export async function updateOperation(id, data) {
     toolsConfig: 'tools_config', machineParameters: 'machine_parameters',
     attentionPoints: 'attention_points', minBatchBeforeNext: 'min_batch_before_next',
     piecesPerHour: 'pieces_per_hour', transferType: 'transfer_type',
+    transportTimeMinutes: 'transport_time_minutes', depositLocation: 'deposit_location',
+    rejectAction: 'reject_action', timeUnit: 'time_unit',
+    inputMaterialId: 'input_material_id', drawingUrl: 'drawing_url',
   };
   for (const [camel, snake] of Object.entries(camelMap)) {
     if (data[camel] !== undefined) {
@@ -231,6 +242,29 @@ export async function createComponent(productId, data) {
   return comp;
 }
 
+export async function updateComponent(id, data) {
+  const row = {};
+  const fieldMap = {
+    componentName: 'component_name', componentReference: 'component_reference',
+    qtyPerParent: 'qty_per_parent', positionCode: 'position_code',
+    materialCode: 'material_code', materialGrade: 'material_grade',
+    rawDimensions: 'raw_dimensions', componentType: 'component_type',
+    supplierCode: 'supplier_code', standardReference: 'standard_reference',
+    inventoryItemId: 'inventory_item_id', notes: 'notes',
+    component_name: 'component_name', component_reference: 'component_reference',
+    qty_per_parent: 'qty_per_parent', position_code: 'position_code',
+    material_code: 'material_code', material_grade: 'material_grade',
+    raw_dimensions: 'raw_dimensions', component_type: 'component_type',
+    supplier_code: 'supplier_code', standard_reference: 'standard_reference',
+    inventory_item_id: 'inventory_item_id',
+  };
+  for (const [key, col] of Object.entries(fieldMap)) {
+    if (data[key] !== undefined) row[col] = data[key];
+  }
+  const [comp] = await db('bom.assembly_components').where({ id }).update(row).returning('*');
+  return comp;
+}
+
 // ─── Cost Rates ───────────────────────────────────────────────────────────────
 
 export async function listCostRates() {
@@ -288,11 +322,44 @@ export async function getMBOMForOrder(orderId) {
       .select('oa.*', 'am.code as machine_code', 'am.name as machine_name');
   }
 
-  // Get assembly components
+  // Get assembly components with extended fields
   const components = await db('bom.assembly_components')
-    .where('parent_product_id', product.id);
+    .where('parent_product_id', product.id)
+    .select('*');
 
-  return { order, product, operations, components };
+  // For each fabricated component, get its sub-operations
+  for (const comp of components) {
+    if (comp.component_product_id) {
+      comp.operations = await db('bom.operations as o')
+        .leftJoin('machines.machines as m', 'o.machine_id', 'm.id')
+        .where('o.product_id', comp.component_product_id)
+        .orderBy('o.sequence')
+        .select('o.*', 'm.code as machine_code', 'm.name as machine_name');
+    } else {
+      comp.operations = [];
+    }
+  }
+
+  // Get machine load data (count of active work order allocations per machine)
+  let machineLoad = [];
+  try {
+    machineLoad = await db('bom.operations as o')
+      .join('production.work_orders as wo', function() {
+        this.on('wo.product_id', '=', 'o.product_id')
+          .orOn('wo.product_reference', '=', db.raw('(SELECT reference FROM bom.products WHERE id = o.product_id)'));
+      })
+      .whereNotIn('wo.status_code', ['completed', 'cancelled'])
+      .whereNotNull('o.machine_id')
+      .groupBy('o.machine_id')
+      .select('o.machine_id')
+      .count('* as allocation_count')
+      .sum('o.cycle_time_seconds as total_cycle_seconds');
+  } catch (_e) {
+    // If query fails (e.g. missing columns), return empty
+    machineLoad = [];
+  }
+
+  return { order, product, operations, components, machineLoad };
 }
 
 // ─── Operation Alternatives ──────────────────────────────────────────────────

@@ -102,6 +102,14 @@ export const postComponent = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+export const putComponent = async (req, res, next) => {
+  try {
+    const c = await svc.updateComponent(req.params.id, req.body);
+    if (!c) return res.status(404).json({ message: 'Componenta negasita.' });
+    res.json(c);
+  } catch (e) { next(e); }
+};
+
 export const getCostRates = async (req, res, next) => {
   try {
     res.json(await svc.listCostRates());

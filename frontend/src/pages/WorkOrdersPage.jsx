@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { Plus, ChevronLeft, ChevronRight, ClipboardList, Euro, Clock, User, Pencil, Trash2, DollarSign } from 'lucide-react'
 import { formatMoney, getRate, convertDisplay } from '../utils/currency'
+import SearchableSelect from '../components/SearchableSelect'
 
 function useTenantCurrency() {
   const [currency, setCurrency] = useState('EUR')
@@ -196,7 +197,7 @@ function WeekCalendar({ workOrders, machines }) {
 function WorkOrderModal({ orders, onClose }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
-    orderId: '', productReference: '', productName: '', quantity: '1',
+    orderId: '', clientId: null, productReference: '', productName: '', quantity: '1',
     priority: 'normal', scheduledStart: '', scheduledEnd: '', notes: '',
   })
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -204,7 +205,7 @@ function WorkOrderModal({ orders, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.post('/work-orders', data),
     onSuccess: () => { qc.invalidateQueries(['work-orders']); toast.success('Comanda de lucru creata cu operatii preincarcate.'); onClose() },
-    onError: (err) => toast.error(err.response?.data?.message || 'Eroare.'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la crearea comenzii de lucru.'),
   })
 
   function handleOrderSelect(e) {
@@ -219,43 +220,74 @@ function WorkOrderModal({ orders, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-semibold text-slate-800 mb-1">Comanda de lucru noua</h3>
         <p className="text-xs text-slate-400 mb-4">Operatiile vor fi preincarcate automat din BOM</p>
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Comanda productie (optional)</label>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Client - selecteaza compania client pentru aceasta comanda</label>
+            <SearchableSelect
+              endpoint="/companies"
+              filterParams={{ companyType: 'client' }}
+              labelField="name"
+              valueField="id"
+              placeholder="Cauta client dupa nume..."
+              value={form.clientId}
+              onChange={(id) => setForm(f2 => ({ ...f2, clientId: id }))}
+              allowCreate={false}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Comanda productie - asociaza cu o comanda existenta (optional)</label>
             <select className="input" value={form.orderId} onChange={handleOrderSelect}>
               <option value="">Fara comanda asociata</option>
               {orders?.map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.product_name}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <input className="input" placeholder="Referinta produs" value={form.productReference} onChange={f('productReference')} />
-            <input className="input" placeholder="Denumire produs" value={form.productName} onChange={f('productName')} />
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Referinta produs - codul unic al produsului</label>
+              <input className="input" placeholder="Ex: PROD-001" value={form.productReference} onChange={f('productReference')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Denumire produs - numele complet al produsului</label>
+              <input className="input" placeholder="Ex: Piesa fata model X" value={form.productName} onChange={f('productName')} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs text-slate-500 mb-1 block">Cantitate *</label>
-              <input className="input" type="number" min="1" value={form.quantity} onChange={f('quantity')} /></div>
-            <div><label className="text-xs text-slate-500 mb-1 block">Prioritate</label>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Cantitate * - numarul de bucati de produs</label>
+              <input className="input" type="number" min="1" value={form.quantity} onChange={f('quantity')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Prioritate - nivelul de urgenta al comenzii</label>
               <select className="input" value={form.priority} onChange={f('priority')}>
                 <option value="low">Scazuta</option>
                 <option value="normal">Normala</option>
                 <option value="high">Ridicata</option>
                 <option value="urgent">Urgenta</option>
-              </select></div>
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs text-slate-500 mb-1 block">Start planificat</label>
-              <input className="input" type="date" value={form.scheduledStart} onChange={f('scheduledStart')} /></div>
-            <div><label className="text-xs text-slate-500 mb-1 block">Sfarsit planificat</label>
-              <input className="input" type="date" value={form.scheduledEnd} onChange={f('scheduledEnd')} /></div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Termen limita (deadline) - data pana la care trebuie finalizat</label>
+              <input className="input" type="date" value={form.scheduledEnd} onChange={f('scheduledEnd')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Start planificat - data la care incepe productia</label>
+              <input className="input" type="date" value={form.scheduledStart} onChange={f('scheduledStart')} />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Note - informatii suplimentare, instructiuni speciale</label>
+            <textarea className="input resize-none" rows={3} placeholder="Scrie aici orice detaliu relevant pentru aceasta comanda..." value={form.notes} onChange={f('notes')} />
           </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
           <button
-            onClick={() => mutation.mutate({ ...form, quantity: Number(form.quantity) })}
+            onClick={() => mutation.mutate({ ...form, quantity: Number(form.quantity), orderId: form.orderId || null })}
             disabled={mutation.isPending || !form.quantity}
             className="btn-primary"
           >
@@ -384,19 +416,35 @@ function HrRatesSection() {
       {showForm && (
         <div className="bg-slate-50 rounded-lg p-3 space-y-2">
           <div className="grid grid-cols-3 gap-2">
-            <input className="input text-xs" placeholder="Rol (ex: operator)" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} />
-            <input className="input text-xs" type="number" step="0.01" placeholder="Tarif orar" value={form.hourlyRate} onChange={e => setForm({ ...form, hourlyRate: e.target.value })} />
-            <select className="input text-xs" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}>
-              <option value="EUR">EUR</option>
-              <option value="RON">RON</option>
-              <option value="USD">USD</option>
-            </select>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Rol *</label>
+              <input className="input text-xs" placeholder="Ex: operator" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Tarif orar (EUR) *</label>
+              <input className="input text-xs" type="number" step="0.01" min="0.01" placeholder="Ex: 12.50" value={form.hourlyRate} onChange={e => setForm({ ...form, hourlyRate: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Moneda</label>
+              <select className="input text-xs" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}>
+                <option value="EUR">EUR</option>
+                <option value="RON">RON</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
           </div>
+          {(!form.hourlyRate || Number(form.hourlyRate) <= 0) && form.role && (
+            <p className="text-xs text-red-500">Tariful orar este obligatoriu si trebuie sa fie un numar pozitiv.</p>
+          )}
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowForm(false)} className="btn-secondary text-xs py-1">Anuleaza</button>
             <button
-              onClick={() => createRate.mutate({ role: form.role, hourlyRate: Number(form.hourlyRate), currency: form.currency })}
-              disabled={!form.role || !form.hourlyRate || createRate.isPending}
+              onClick={() => {
+                const rate = Number(form.hourlyRate)
+                if (!rate || rate <= 0) { toast.error('Tariful orar este obligatoriu si trebuie sa fie un numar pozitiv.'); return }
+                createRate.mutate({ role: form.role, hourlyRateEur: rate, currency: form.currency })
+              }}
+              disabled={!form.role || !form.hourlyRate || Number(form.hourlyRate) <= 0 || createRate.isPending}
               className="btn-primary text-xs py-1"
             >
               Salveaza

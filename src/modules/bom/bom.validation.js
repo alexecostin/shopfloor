@@ -41,6 +41,12 @@ export const createOperation = Joi.object({
   minBatchBeforeNext: Joi.number().integer().min(1).allow(null),
   transferType: Joi.string().max(50).allow('', null),
   piecesPerHour: Joi.number().precision(2).allow(null),
+  transportTimeMinutes: Joi.number().integer().min(0).default(0),
+  depositLocation: Joi.string().max(100).allow('', null),
+  rejectAction: Joi.string().max(30).allow('', null),
+  timeUnit: Joi.string().valid('seconds', 'minutes', 'hours').default('seconds'),
+  inputMaterialId: Joi.string().uuid().allow(null),
+  drawingUrl: Joi.string().allow('', null),
 });
 
 export const createMaterial = Joi.object({

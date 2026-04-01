@@ -31,6 +31,7 @@ router.delete('/materials/:id', adm, c.deleteMaterial);
 // Assembly Components
 router.get('/products/:productId/components', c.getComponents);
 router.post('/products/:productId/components', mgr, validate(v.createComponent), c.postComponent);
+router.put('/components/:id', mgr, c.putComponent);
 
 // Cost Rates
 router.get('/cost-rates', c.getCostRates);

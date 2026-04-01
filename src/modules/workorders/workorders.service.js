@@ -40,20 +40,22 @@ export async function getWorkOrder(id) {
 
 export async function createWorkOrder(data, userId) {
   const number = await nextWONumber();
-  const [wo] = await db('production.work_orders').insert({
+  const rows = await db('production.work_orders').insert({
     work_order_number: number,
-    order_id: data.orderId,
-    order_number: data.orderNumber,
-    product_id: data.productId,
-    product_reference: data.productReference,
-    product_name: data.productName,
+    order_id: data.orderId || null,
+    order_number: data.orderNumber || null,
+    product_id: data.productId || null,
+    product_reference: data.productReference || null,
+    product_name: data.productName || null,
+    client_id: data.clientId || null,
     quantity: data.quantity,
     priority: data.priority || 'normal',
-    scheduled_start: data.scheduledStart,
-    scheduled_end: data.scheduledEnd,
+    scheduled_start: data.scheduledStart || null,
+    scheduled_end: data.scheduledEnd || null,
     created_by: userId,
-    notes: data.notes,
+    notes: data.notes || null,
   }).returning('*');
+  const wo = Array.isArray(rows) ? rows[0] : rows;
 
   // Daca exista un produs BOM, preincarca operatiile automat
   if (data.productId || data.productReference) {
@@ -139,7 +141,8 @@ export async function updateWorkOrder(id, data, tenantId) {
   if (data.status === 'in_progress' && !row.actual_start) row.actual_start = new Date();
   if (data.status === 'completed') row.actual_end = new Date();
   row.updated_at = new Date();
-  const [wo] = await db('production.work_orders').where({ id }).update(row).returning('*');
+  const rows = await db('production.work_orders').where({ id }).update(row).returning('*');
+  const wo = Array.isArray(rows) ? rows[0] : rows;
   return wo;
 }
 
@@ -148,10 +151,11 @@ export async function changeStatus(tenantId, id, toStatus) {
   if (!current) throw new Error('Comanda negasita');
   if (current.status === toStatus) return current;
   await orderStatusSvc.validateTransition(tenantId, current.status, toStatus);
-  const [updated] = await db('production.work_orders')
+  const rows = await db('production.work_orders')
     .where('id', id)
     .update({ status: toStatus, updated_at: db.fn.now() })
     .returning('*');
+  const updated = Array.isArray(rows) ? rows[0] : rows;
   return updated;
 }
 
@@ -196,7 +200,8 @@ export async function updateOperation(id, data) {
   if (data.status === 'in_progress') row.started_at = new Date();
   if (data.status === 'completed') row.completed_at = new Date();
 
-  const [updated] = await db('production.work_order_operations').where({ id }).update(row).returning('*');
+  const rows = await db('production.work_order_operations').where({ id }).update(row).returning('*');
+  const updated = Array.isArray(rows) ? rows[0] : rows;
   return updated;
 }
 
@@ -227,7 +232,7 @@ export async function addHrAllocation(workOrderId, data) {
   }
 
   const hours = Number(data.allocatedHours);
-  const [alloc] = await db('production.hr_allocations').insert({
+  const allocRows = await db('production.hr_allocations').insert({
     work_order_id: workOrderId,
     work_order_operation_id: data.workOrderOperationId,
     user_id: data.userId,
@@ -242,6 +247,7 @@ export async function addHrAllocation(workOrderId, data) {
     shift: data.shift,
     notes: data.notes,
   }).returning('*');
+  const alloc = Array.isArray(allocRows) ? allocRows[0] : allocRows;
   return alloc;
 }
 
@@ -300,14 +306,19 @@ export async function listHrRates() {
 }
 
 export async function createHrRate(data) {
-  const [rate] = await db('auth.user_cost_rates').insert({
-    user_id: data.userId,
+  const hourlyRate = Number(data.hourlyRateEur || data.hourlyRate);
+  if (!hourlyRate || isNaN(hourlyRate) || hourlyRate <= 0) {
+    throw Object.assign(new Error('Tariful orar este obligatoriu si trebuie sa fie un numar pozitiv.'), { status: 400 });
+  }
+  const rows = await db('auth.user_cost_rates').insert({
+    user_id: data.userId || null,
     role: data.role,
-    hourly_rate_eur: data.hourlyRateEur,
+    hourly_rate_eur: hourlyRate,
     overhead_factor: data.overheadFactor || 1.0,
     valid_from: data.validFrom || new Date(),
-    valid_to: data.validTo,
-    notes: data.notes,
+    valid_to: data.validTo || null,
+    notes: data.notes || null,
   }).returning('*');
+  const rate = Array.isArray(rows) ? rows[0] : rows;
   return rate;
 }

@@ -49,7 +49,8 @@ export default function SearchableSelect({
   useEffect(() => {
     if (!open || !endpoint) return;
     setLoading(true);
-    const params = { [searchParam]: debouncedQuery, limit: 20, ...filterParams };
+    const params = { limit: 20, ...filterParams };
+    if (debouncedQuery) params[searchParam] = debouncedQuery;
     api.get(endpoint, { params })
       .then(r => {
         const data = r.data;
@@ -143,7 +144,7 @@ export default function SearchableSelect({
           )}
           {!loading && options.length === 0 && (
             <div className="p-3 text-xs text-slate-400 text-center">
-              {debouncedQuery ? 'Niciun rezultat' : 'Incepe sa tastezi...'}
+              {debouncedQuery ? 'Niciun rezultat gasit' : 'Niciun rezultat. Tastati pentru a cauta...'}
             </div>
           )}
           {options.map(item => (
