@@ -1,7 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, AlertCircle, Info, CheckCircle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, AlertCircle, Info, CheckCircle, RefreshCw, ArrowRight } from 'lucide-react'
 import api from '../api/client'
+
+const ROLE_LABELS = {
+  inginer_tehnolog: 'Inginer Tehnolog',
+  logistica: 'Logistica',
+  comercial: 'Comercial',
+  planificator: 'Planificator',
+  mentenanta: 'Mentenanta',
+}
 
 const SEVERITY_CONFIG = {
   critical: {
@@ -45,7 +53,15 @@ function TaskCard({ task }) {
       className={`w-full text-left rounded-lg border-l-4 ${config.border} ${config.bg} p-3 flex items-start gap-3 hover:opacity-80 transition-opacity cursor-pointer`}
     >
       <Icon size={18} className={`${config.iconColor} flex-shrink-0 mt-0.5`} />
-      <span className={`text-sm font-medium ${config.textColor}`}>{task.message}</span>
+      <div className="flex-1 min-w-0">
+        <span className={`text-sm font-medium ${config.textColor}`}>{task.message}</span>
+        {task.assignTo && (
+          <div className="flex items-center gap-1 mt-1">
+            <ArrowRight size={12} className="text-slate-400" />
+            <span className="text-xs text-slate-500">Responsabil: <strong>{ROLE_LABELS[task.assignTo] || task.assignTo}</strong></span>
+          </div>
+        )}
+      </div>
     </button>
   )
 }

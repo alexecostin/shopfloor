@@ -99,6 +99,135 @@ export async function getTasksForUser(userId, role, tenantId) {
           actionUrl: '/maintenance',
           category: 'maintenance',
         });
+
+      // ═══ VERIFICARI INTEGRITATE DATE PER COMANDA ═══
+      // Comenzi fara produs BOM asociat
+      const ordersNoProduct = await db('production.work_orders')
+        .whereIn('status', ['planned', 'released'])
+        .where(q => q.whereNull('product_id').orWhere('product_id', ''))
+        .whereNotExists(function() {
+          this.select('*').from('bom.products')
+            .whereRaw("bom.products.reference = production.work_orders.product_reference");
+        })
+        .select('work_order_number', 'product_name', 'product_reference')
+        .limit(5)
+        .catch(() => []);
+      for (const wo of ordersNoProduct) {
+        tasks.push({
+          severity: 'warning',
+          message: `Comanda ${wo.work_order_number} (${wo.product_name || wo.product_reference}) nu are produs in catalog BOM — inginerul tehnolog trebuie sa creeze produsul si sa defineasca MBOM`,
+          actionUrl: '/bom',
+          category: 'production',
+          assignTo: 'inginer_tehnolog',
+        });
+      }
+
+      // Comenzi cu BOM dar fara operatii definite (MBOM gol)
+      const ordersEmptyMbom = await db('production.work_orders as wo')
+        .join('bom.products as bp', function() {
+          this.on('bp.reference', '=', 'wo.product_reference')
+            .orOn('bp.id', '=', 'wo.product_id');
+        })
+        .whereIn('wo.status', ['planned', 'released'])
+        .whereNotExists(function() {
+          this.select('*').from('bom.operations').whereRaw('bom.operations.product_id = bp.id');
+        })
+        .select('wo.work_order_number', 'wo.product_name', 'bp.reference as bom_ref')
+        .limit(5)
+        .catch(() => []);
+      for (const wo of ordersEmptyMbom) {
+        tasks.push({
+          severity: 'warning',
+          message: `Comanda ${wo.work_order_number} (${wo.product_name}) are produs BOM dar fara operatii — inginerul tehnolog trebuie sa defineasca MBOM (operatii, masini, timpi)`,
+          actionUrl: '/bom',
+          category: 'production',
+          assignTo: 'inginer_tehnolog',
+        });
+      }
+
+      // Operatii BOM fara masina alocata
+      const opsNoMachine = await db('bom.operations as o')
+        .join('bom.products as p', 'o.product_id', 'p.id')
+        .whereNull('o.machine_id')
+        .where('p.approval_status', 'active')
+        .where('o.is_active', true)
+        .select('p.reference', 'o.operation_name', 'o.sequence')
+        .limit(5)
+        .catch(() => []);
+      if (opsNoMachine.length > 0) {
+        tasks.push({
+          severity: 'info',
+          message: `${opsNoMachine.length} operatii din MBOM nu au masina alocata (ex: ${opsNoMachine[0]?.reference} → ${opsNoMachine[0]?.operation_name}) — inginerul sa aloce masini`,
+          actionUrl: '/bom',
+          category: 'production',
+          assignTo: 'inginer_tehnolog',
+        });
+      }
+
+      // Comenzi cu verificare tehnica incompleta
+      const ordersNoTechCheck = await db('production.work_orders')
+        .whereIn('status', ['planned'])
+        .where(q => q.whereNull('technical_check_status').orWhere('technical_check_status', 'not_checked'))
+        .select('work_order_number', 'product_name')
+        .limit(5)
+        .catch(() => []);
+      if (ordersNoTechCheck.length > 0) {
+        tasks.push({
+          severity: 'info',
+          message: `${ordersNoTechCheck.length} comenzi fara verificare tehnica — inginerul trebuie sa completeze checklist-ul inainte de lansare in productie`,
+          actionUrl: '/work-orders',
+          category: 'production',
+          assignTo: 'inginer_tehnolog',
+        });
+      }
+
+      // Materiale necesare dar lipsa din stoc (MRP check)
+      const activeOrders = await db('production.work_orders')
+        .whereIn('status', ['planned', 'released'])
+        .select('id', 'work_order_number', 'product_reference', 'product_id', 'quantity')
+        .limit(10)
+        .catch(() => []);
+      let materialsDeficit = 0;
+      for (const wo of activeOrders) {
+        const product = wo.product_id
+          ? await db('bom.products').where('id', wo.product_id).first().catch(() => null)
+          : await db('bom.products').where('reference', wo.product_reference).first().catch(() => null);
+        if (!product) continue;
+        const materials = await db('bom.materials').where('product_id', product.id).catch(() => []);
+        for (const mat of materials) {
+          const item = await db('inventory.items').where('code', mat.material_code).first().catch(() => null);
+          const stock = item ? await db('inventory.stock_levels').where('item_id', item.id).first().catch(() => null) : null;
+          const needed = Math.ceil((mat.qty_per_piece || 1) * (wo.quantity || 1) * (mat.waste_factor || 1));
+          const available = Number(stock?.current_qty) || 0;
+          if (available < needed) materialsDeficit++;
+        }
+      }
+      if (materialsDeficit > 0) {
+        tasks.push({
+          severity: 'critical',
+          message: `${materialsDeficit} materiale insuficiente pentru comenzile active — logistica trebuie sa lanseze comenzi de aprovizionare`,
+          actionUrl: '/purchasing',
+          category: 'logistics',
+          assignTo: 'logistica',
+        });
+      }
+
+      // Comenzi fara client asociat
+      const ordersNoClient = await db('production.work_orders')
+        .whereIn('status', ['planned', 'released'])
+        .whereNull('client_id')
+        .count('* as c')
+        .catch(() => [{ c: 0 }]);
+      const noClientCount = Number(ordersNoClient[0]?.c) || 0;
+      if (noClientCount > 0) {
+        tasks.push({
+          severity: 'info',
+          message: `${noClientCount} comenzi fara client asociat — comercialul trebuie sa completeze informatiile clientului`,
+          actionUrl: '/client-orders',
+          category: 'commercial',
+          assignTo: 'comercial',
+        });
+      }
     }
 
     if (['shift_leader'].includes(role)) {
