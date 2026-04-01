@@ -182,8 +182,13 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
     constraints: { maxShifts, overtimePercent, allowWeekend },
   };
 
+  // Determine plan type from period duration
+  const periodDays = Math.ceil((new Date(periodEnd) - new Date(periodStart)) / 86400000);
+  const planType = periodDays <= 1 ? 'daily' : periodDays <= 3 ? '3day' : periodDays <= 7 ? 'weekly' : periodDays <= 14 ? 'biweekly' : periodDays <= 31 ? 'monthly' : periodDays <= 92 ? 'quarterly' : 'custom';
+
   return {
     allocations,
+    planType,
     summary,
     warnings,
     orderImpact: Object.values(orderCompletionDates),
@@ -208,7 +213,7 @@ export async function applySmartPlan(planResult, periodStart, periodEnd, userId)
   // Create master plan
   const [masterPlan] = await db('planning.master_plans').insert({
     name: `Smart Plan ${new Date().toISOString().split('T')[0]}`,
-    plan_type: 'weekly',
+    plan_type: planResult.planType || 'auto',
     year: new Date(periodStart).getFullYear(),
     week_number: Math.ceil((new Date(periodStart) - new Date(new Date(periodStart).getFullYear(), 0, 1)) / (7 * 86400000)),
     start_date: periodStart,
