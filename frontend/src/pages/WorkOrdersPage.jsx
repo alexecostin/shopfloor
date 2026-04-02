@@ -196,6 +196,7 @@ function WeekCalendar({ workOrders, machines }) {
 
 function WorkOrderModal({ orders, onClose }) {
   const qc = useQueryClient()
+  const [orderType, setOrderType] = useState('client') // 'client' or 'internal'
   const [form, setForm] = useState({
     orderId: '', clientId: null, productReference: '', productName: '', quantity: '1',
     priority: 'normal', scheduledStart: '', scheduledEnd: '', notes: '',
@@ -204,18 +205,31 @@ function WorkOrderModal({ orders, onClose }) {
 
   const mutation = useMutation({
     mutationFn: (data) => api.post('/work-orders', data),
-    onSuccess: () => { qc.invalidateQueries(['work-orders']); toast.success('Comanda de lucru creata cu operatii preincarcate.'); onClose() },
+    onSuccess: () => { qc.invalidateQueries(['work-orders']); toast.success('Comanda de lucru creata.'); onClose() },
     onError: (err) => toast.error(err.response?.data?.message || 'Eroare la crearea comenzii de lucru.'),
   })
 
-  function handleOrderSelect(e) {
-    const order = orders?.find(o => o.id === e.target.value)
-    setForm(prev => ({
-      ...prev, orderId: e.target.value,
-      productReference: order?.product_code || '',
-      productName: order?.product_name || '',
-      quantity: String(order?.target_quantity || 1),
-    }))
+  // Cand selectez comanda client existenta, precompletez tot
+  const { data: clientOrders = [] } = useQuery({
+    queryKey: ['client-orders-for-wo'],
+    queryFn: () => api.get('/work-orders', { params: { limit: 100 } }).then(r => r.data?.data || []),
+    enabled: orderType === 'client',
+  })
+
+  function handleClientOrderSelect(orderId) {
+    const order = clientOrders.find(o => o.id === orderId)
+    if (order) {
+      setForm(prev => ({
+        ...prev,
+        orderId: order.id,
+        clientId: order.client_id || null,
+        productReference: order.product_reference || '',
+        productName: order.product_name || '',
+        quantity: String(order.quantity || 1),
+        priority: order.priority || 'normal',
+        scheduledEnd: order.scheduled_end ? order.scheduled_end.split('T')[0] : '',
+      }))
+    }
   }
 
   return (
@@ -224,26 +238,63 @@ function WorkOrderModal({ orders, onClose }) {
         <h3 className="font-semibold text-slate-800 mb-1">Comanda de lucru noua</h3>
         <p className="text-xs text-slate-400 mb-4">Operatiile vor fi preincarcate automat din BOM</p>
         <div className="space-y-3">
+          {/* Tip comanda */}
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Client - selecteaza compania client pentru aceasta comanda</label>
-            <SearchableSelect
-              endpoint="/companies"
-              filterParams={{ companyType: 'client' }}
-              labelField="name"
-              valueField="id"
-              placeholder="Cauta client dupa nume..."
-              value={form.clientId}
-              onChange={(id) => setForm(f2 => ({ ...f2, clientId: id }))}
-              allowCreate={false}
-            />
+            <label className="text-xs font-medium text-slate-600 mb-2 block">Tip comanda</label>
+            <div className="flex gap-3">
+              <label className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${orderType === 'client' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input type="radio" name="orderType" value="client" checked={orderType === 'client'} onChange={() => setOrderType('client')} className="text-blue-600" />
+                <div>
+                  <span className="text-sm font-medium text-slate-800">Comanda client</span>
+                  <p className="text-[10px] text-slate-400">Vine de la un client extern</p>
+                </div>
+              </label>
+              <label className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${orderType === 'internal' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input type="radio" name="orderType" value="internal" checked={orderType === 'internal'} onChange={() => setOrderType('internal')} className="text-blue-600" />
+                <div>
+                  <span className="text-sm font-medium text-slate-800">Comanda interna</span>
+                  <p className="text-[10px] text-slate-400">Matrite, scule, prototipuri, piese schimb</p>
+                </div>
+              </label>
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Comanda productie - asociaza cu o comanda existenta (optional)</label>
-            <select className="input" value={form.orderId} onChange={handleOrderSelect}>
-              <option value="">Fara comanda asociata</option>
-              {orders?.map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.product_name}</option>)}
-            </select>
-          </div>
+
+          {/* Client — selectie comanda existenta SAU client nou */}
+          {orderType === 'client' && (
+            <>
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Selecteaza comanda client existenta</label>
+                <select className="input" value={form.orderId} onChange={e => handleClientOrderSelect(e.target.value)}>
+                  <option value="">Selecteaza o comanda...</option>
+                  {clientOrders.filter(o => ['planned', 'released'].includes(o.status)).map(o => (
+                    <option key={o.id} value={o.id}>
+                      {o.work_order_number} — {o.product_name} ({o.quantity} buc)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-0.5">Sau completeaza manual mai jos daca nu exista inca</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Client</label>
+                <SearchableSelect
+                  endpoint="/companies"
+                  filterParams={{ companyType: 'client' }}
+                  labelField="name"
+                  valueField="id"
+                  placeholder="Cauta client..."
+                  value={form.clientId}
+                  onChange={(id) => setForm(prev => ({ ...prev, clientId: id }))}
+                  allowCreate={false}
+                />
+              </div>
+            </>
+          )}
+
+          {orderType === 'internal' && (
+            <div className="bg-amber-50 rounded-lg p-3 text-xs text-amber-700">
+              <strong>Comanda interna</strong> — productie pentru nevoi interne (matrite, scule, piese schimb, prototipuri). Nu are client sau pret de vanzare.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Referinta produs - codul unic al produsului</label>
