@@ -1,4 +1,5 @@
 import db from '../config/db.js';
+import { escapeLike } from '../utils/sanitize.js';
 
 /**
  * Calculate material requirements for one or more work orders.
@@ -20,7 +21,7 @@ export async function calculateRequirements(workOrderIds) {
       product = await db('bom.products')
         .where(q => {
           if (wo.product_reference) q.where('reference', wo.product_reference);
-          else if (wo.product_name) q.where('name', 'ilike', `%${wo.product_name}%`);
+          else if (wo.product_name) q.where('name', 'ilike', `%${escapeLike(wo.product_name)}%`);
         })
         .first();
     }
@@ -59,7 +60,7 @@ export async function calculateRequirements(workOrderIds) {
     try {
       item = await db('inventory.items')
         .where('code', req.materialCode)
-        .orWhere('name', 'ilike', `%${req.materialName}%`)
+        .orWhere('name', 'ilike', `%${escapeLike(req.materialName)}%`)
         .first();
     } catch (_e) {
       // inventory schema may not exist

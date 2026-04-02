@@ -1,8 +1,11 @@
 import db from '../config/db.js';
+import { getTenantConfig } from './app-config.service.js';
 
 export async function getTasksForUser(userId, role, tenantId) {
   const tasks = [];
   const today = new Date().toISOString().split('T')[0];
+  const config = await getTenantConfig(tenantId).catch(() => ({}));
+  const certExpiryDays = config.certificationExpiryWarningDays || 30;
 
   try {
     if (['admin', 'production_manager'].includes(role)) {
@@ -303,6 +306,101 @@ export async function getTasksForUser(userId, role, tenantId) {
           actionUrl: '/maintenance',
           category: 'maintenance',
         });
+    }
+
+    if (['admin', 'production_manager'].includes(role)) {
+      // Operator certification checks
+      const expiringSoonCerts = await db('auth.operator_certifications')
+        .where('is_active', true)
+        .where('expiry_date', '<=', new Date(Date.now() + certExpiryDays * 86400000))
+        .where('expiry_date', '>', new Date())
+        .count('* as c').catch(() => [{ c: 0 }]);
+      const expiringCount = Number(expiringSoonCerts[0]?.c) || 0;
+      if (expiringCount > 0) tasks.push({
+        severity: 'warning',
+        message: `${expiringCount} certificari operator expira in ${certExpiryDays} zile — programeaza recertificare`,
+        actionUrl: '/machines',
+        category: 'hr',
+        assignTo: 'admin',
+      });
+
+      // Expired certifications
+      const expiredCerts = await db('auth.operator_certifications')
+        .where('is_active', true)
+        .where('expiry_date', '<', new Date())
+        .count('* as c').catch(() => [{ c: 0 }]);
+      const expiredCertCount = Number(expiredCerts[0]?.c) || 0;
+      if (expiredCertCount > 0) tasks.push({
+        severity: 'critical',
+        message: `${expiredCertCount} certificari operator EXPIRATE — operatorii nu pot lucra pe masini fara certificare valida`,
+        actionUrl: '/skill-matrix',
+        category: 'hr',
+        assignTo: 'admin',
+      });
+
+      // Usable remnants that could save money
+      const remnants = await db('inventory.remnants')
+        .where('status', 'available')
+        .count('* as c').catch(() => [{ c: 0 }]);
+      const remnantCount = Number(remnants[0]?.c) || 0;
+      if (remnantCount > 0) tasks.push({
+        severity: 'info',
+        message: `${remnantCount} resturi utilizabile in depozit — verifica daca pot fi folosite pentru comenzile active`,
+        actionUrl: '/inventory',
+        category: 'logistics',
+        assignTo: 'inginer_tehnolog',
+      });
+
+      // Depot locations near capacity
+      const fullLocations = await db('inventory.locations')
+        .where('is_active', true)
+        .whereNotNull('capacity')
+        .whereRaw('current_occupancy >= capacity * 0.9')
+        .count('* as c').catch(() => [{ c: 0 }]);
+      const fullLocCount = Number(fullLocations[0]?.c) || 0;
+      if (fullLocCount > 0) tasks.push({
+        severity: 'warning',
+        message: `${fullLocCount} locatii depozit aproape pline (>90%) — elibereaza spatiu`,
+        actionUrl: '/inventory',
+        category: 'logistics',
+        assignTo: 'logistica',
+      });
+
+      // Framework contracts with upcoming deliveries
+      const upcomingDeliveries = await db('production.framework_contracts')
+        .where('status', 'active')
+        .where('end_date', '>=', new Date())
+        .count('* as c').catch(() => [{ c: 0 }]);
+      const contractCount = Number(upcomingDeliveries[0]?.c) || 0;
+      if (contractCount > 0) tasks.push({
+        severity: 'info',
+        message: `${contractCount} contracte cadru active — verifica daca urmatoarele livrari sunt planificate`,
+        actionUrl: '/contracts',
+        category: 'commercial',
+        assignTo: 'comercial',
+      });
+
+      // Operations without certified operators in planning
+      // (Check if any planned allocation has a machine with no certified operators)
+      const allocsNoCert = await db('planning.daily_allocations as da')
+        .join('machines.machines as m', 'da.machine_id', 'm.id')
+        .where('da.plan_date', '>=', new Date().toISOString().split('T')[0])
+        .whereNot('da.status', 'cancelled')
+        .whereNotExists(function() {
+          this.select('*').from('auth.operator_certifications as oc')
+            .whereRaw('oc.machine_type = m.type')
+            .where('oc.is_active', true)
+            .where(q => q.whereNull('oc.expiry_date').orWhere('oc.expiry_date', '>', new Date()));
+        })
+        .countDistinct('m.id as c').catch(() => [{ c: 0 }]);
+      const noCertMachines = Number(allocsNoCert[0]?.c) || 0;
+      if (noCertMachines > 0) tasks.push({
+        severity: 'critical',
+        message: `${noCertMachines} masini planificate fara operator certificat — aloca operatori certificati sau programeaza certificari`,
+        actionUrl: '/planning',
+        category: 'planning',
+        assignTo: 'planificator',
+      });
     }
 
     // Success message if nothing critical

@@ -1,4 +1,6 @@
 import db from '../config/db.js';
+import { getTenantConfig } from './app-config.service.js';
+import { escapeLike } from '../utils/sanitize.js';
 
 /**
  * Framework Contracts (Contracte Cadru) service.
@@ -19,6 +21,7 @@ export async function listContracts(tenantId, status) {
 // ── Create contract ─────────────────────────────────────────────────────────
 
 export async function createContract(data) {
+  const config = await getTenantConfig(data.tenantId || null).catch(() => ({}));
   const [contract] = await db('production.framework_contracts').insert({
     client_id: data.clientId,
     contract_number: data.contractNumber,
@@ -26,7 +29,7 @@ export async function createContract(data) {
     product_name: data.productName || null,
     total_quantity: data.totalQuantity,
     unit_price: data.unitPrice || null,
-    currency: data.currency || 'RON',
+    currency: data.currency || config.defaultCurrency || 'RON',
     delivery_frequency: data.deliveryFrequency, // weekly, biweekly, monthly
     quantity_per_delivery: data.quantityPerDelivery,
     start_date: data.startDate,
@@ -50,7 +53,7 @@ export async function getContract(id) {
 
   // Get linked work orders (generated from this contract via order_number pattern)
   const orders = await db('production.work_orders')
-    .where('order_number', 'like', `${contract.contract_number}-%`)
+    .where('order_number', 'like', `${escapeLike(contract.contract_number)}-%`)
     .orderBy('created_at', 'desc');
 
   // Calculate delivered quantity
@@ -93,7 +96,7 @@ export async function generateNextDelivery(contractId, userId) {
 
   // Count existing orders from this contract
   const existingOrders = await db('production.work_orders')
-    .where('order_number', 'like', `${contract.contract_number}-%`)
+    .where('order_number', 'like', `${escapeLike(contract.contract_number)}-%`)
     .count('* as c');
   const orderNum = Number(existingOrders[0]?.c) || 0;
 

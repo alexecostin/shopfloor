@@ -49,6 +49,9 @@ export async function getTenantConfig(tenantId) {
     alertToolCyclesPercent: Number(settings.alert_tool_cycles_percent) || 90,
     alertPriceIncreasePercent: Number(settings.alert_price_increase_percent) || 10,
 
+    // Certification
+    certificationExpiryWarningDays: Number(settings.certification_expiry_warning_days) || 30,
+
     // Currency & locale
     defaultCurrency: settings.default_currency || 'RON',
     defaultTimezone: settings.default_timezone || 'Europe/Bucharest',

@@ -1,5 +1,6 @@
 import db from '../config/db.js';
 import { calculateRequirements } from './mrp.service.js';
+import { getTenantConfig } from './app-config.service.js';
 
 /**
  * Generate aggregated POs per supplier from MRP results.
@@ -65,12 +66,13 @@ export async function createAggregatedPOs(supplierGroups, userId) {
     const nextval = result.rows?.[0]?.nextval || Date.now();
     const poNumber = `PO-${new Date().getFullYear()}-${String(nextval).padStart(5, '0')}`;
 
+    const config = await getTenantConfig(null).catch(() => ({}));
     const [po] = await db('purchasing.purchase_orders').insert({
       po_number: poNumber,
       supplier_id: group.supplierId,
       status: 'draft',
       total_amount: group.totalEstimatedCost,
-      currency: 'RON',
+      currency: config.defaultCurrency || 'RON',
       notes: `Comanda agregata din MRP — ${group.lines.length} articole necesare pentru: ${group.lines.map(l => l.neededForOrders).join('; ')}`,
       created_by: userId,
     }).returning('*');
