@@ -3,7 +3,10 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Building2, ChevronRight, Pencil, Trash2, FileText, ShoppingCart, Truck, Package, Star } from 'lucide-react'
+import {
+  Plus, Building2, ChevronRight, Pencil, Trash2, FileText, ShoppingCart,
+  Truck, Package, Star, X, Phone, ClipboardList, Users, ArrowLeft
+} from 'lucide-react'
 
 const TYPE_LABELS = { client: 'Client', supplier: 'Furnizor', prospect: 'Prospect', both: 'Client & Furnizor' }
 const TYPE_COLORS = {
@@ -206,7 +209,7 @@ function EditContactModal({ contact, onClose }) {
 }
 
 /* ---- Client-specific sections ---- */
-function ClientSection({ companyId }) {
+function ClientSection({ companyId, contacts }) {
   const { data: workOrders, isLoading: woLoading } = useQuery({
     queryKey: ['company-work-orders', companyId],
     queryFn: () => api.get('/work-orders', { params: { client_id: companyId, limit: 50 } }).then(r => r.data),
@@ -215,24 +218,33 @@ function ClientSection({ companyId }) {
   const woList = workOrders?.data || workOrders || []
   const inProgressCount = woList.filter(wo => wo.status === 'in_progress').length
   const deliveredCount = woList.reduce((sum, wo) => sum + (Number(wo.delivered_qty) || 0), 0)
+  const completedCount = woList.filter(wo => wo.status === 'completed').length
   const totalValue = woList.reduce((sum, wo) => sum + ((Number(wo.quantity) || 0) * (Number(wo.unit_price) || 0)), 0)
+
+  // Find primary contact
+  const primaryContact = contacts?.find(c => c.is_primary) || contacts?.[0]
 
   return (
     <div className="space-y-4">
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-          <p className="text-xs text-blue-500 font-medium">Piese in productie</p>
-          <p className="text-xl font-bold text-blue-700">{inProgressCount}</p>
-          <p className="text-[10px] text-blue-400">comenzi active</p>
+          <p className="text-xs text-blue-500 font-medium">Total comenzi</p>
+          <p className="text-xl font-bold text-blue-700">{woList.length}</p>
+          <p className="text-[10px] text-blue-400">comenzi primite</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-amber-500 font-medium">In productie</p>
+          <p className="text-xl font-bold text-amber-700">{inProgressCount}</p>
+          <p className="text-[10px] text-amber-400">comenzi active</p>
         </div>
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-          <p className="text-xs text-green-500 font-medium">Piese livrate</p>
-          <p className="text-xl font-bold text-green-700">{deliveredCount.toLocaleString('ro-RO')}</p>
-          <p className="text-[10px] text-green-400">total livrate</p>
+          <p className="text-xs text-green-500 font-medium">Livrate</p>
+          <p className="text-xl font-bold text-green-700">{completedCount}</p>
+          <p className="text-[10px] text-green-400">comenzi finalizate</p>
         </div>
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
-          <p className="text-xs text-purple-500 font-medium">Valoare comenzi</p>
+          <p className="text-xs text-purple-500 font-medium">Valoare totala</p>
           <p className="text-xl font-bold text-purple-700">{totalValue.toLocaleString('ro-RO', { maximumFractionDigits: 0 })}</p>
           <p className="text-[10px] text-purple-400">EUR total</p>
         </div>
@@ -255,6 +267,7 @@ function ClientSection({ companyId }) {
                   <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Cant.</th>
                   <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Status</th>
                   <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Deadline</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Contact</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -269,18 +282,37 @@ function ClientSection({ companyId }) {
                   return (
                     <tr key={wo.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 font-mono text-xs text-blue-600">{wo.order_number || wo.wo_number || `#${wo.id}`}</td>
-                      <td className="px-3 py-2 text-slate-700 text-xs">{wo.product_name || wo.product || '—'}</td>
-                      <td className="px-3 py-2 text-right text-xs">{wo.quantity?.toLocaleString('ro-RO') || '—'}</td>
+                      <td className="px-3 py-2 text-slate-700 text-xs">{wo.product_name || wo.product || '-'}</td>
+                      <td className="px-3 py-2 text-right text-xs">{wo.quantity?.toLocaleString('ro-RO') || '-'}</td>
                       <td className="px-3 py-2">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[wo.status] || 'bg-slate-100 text-slate-600'}`}>
-                          {wo.status || '—'}
+                          {wo.status || '-'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500">{wo.deadline ? new Date(wo.deadline).toLocaleDateString('ro-RO') : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        {wo.deadline ? new Date(wo.deadline).toLocaleDateString('ro-RO') : 'Fara termen'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        {wo.contact_person || (primaryContact ? primaryContact.full_name : '-')}
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
+              {/* Totals row */}
+              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                <tr>
+                  <td className="px-3 py-2 text-xs font-medium text-slate-700" colSpan={2}>Total: {woList.length} comenzi</td>
+                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-700">
+                    {woList.reduce((s, wo) => s + (Number(wo.quantity) || 0), 0).toLocaleString('ro-RO')}
+                  </td>
+                  <td className="px-3 py-2" colSpan={3}>
+                    <span className="text-xs font-medium text-slate-600">
+                      Valoare: {totalValue.toLocaleString('ro-RO', { maximumFractionDigits: 2 })} EUR
+                    </span>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         ) : (
@@ -311,8 +343,36 @@ function SupplierSection({ companyId }) {
   const poList = purchaseOrders?.data || purchaseOrders || []
   const itemsList = suppliedItems?.data || suppliedItems || []
 
+  const pendingCount = poList.filter(po => ['draft', 'sent', 'confirmed'].includes(po.status)).length
+  const receivedCount = poList.filter(po => po.status === 'received').length
+  const totalPOValue = poList.reduce((sum, po) => sum + (Number(po.total) || 0), 0)
+
   return (
     <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-blue-500 font-medium">Total PO-uri</p>
+          <p className="text-xl font-bold text-blue-700">{poList.length}</p>
+          <p className="text-[10px] text-blue-400">comenzi achizitie</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-amber-500 font-medium">In asteptare</p>
+          <p className="text-xl font-bold text-amber-700">{pendingCount}</p>
+          <p className="text-[10px] text-amber-400">livrare asteptata</p>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-green-500 font-medium">Livrate</p>
+          <p className="text-xl font-bold text-green-700">{receivedCount}</p>
+          <p className="text-[10px] text-green-400">receptionate</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-purple-500 font-medium">Valoare achizitii</p>
+          <p className="text-xl font-bold text-purple-700">{totalPOValue.toLocaleString('ro-RO', { maximumFractionDigits: 0 })}</p>
+          <p className="text-[10px] text-purple-400">EUR total</p>
+        </div>
+      </div>
+
       {/* Scorecard */}
       {scorecard && (
         <div>
@@ -364,13 +424,13 @@ function SupplierSection({ companyId }) {
                   return (
                     <tr key={po.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 font-mono text-xs text-blue-600">{po.po_number || po.order_number || `#${po.id}`}</td>
-                      <td className="px-3 py-2 text-right text-xs font-medium">{po.total != null ? `${Number(po.total).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} ${po.currency || 'EUR'}` : '—'}</td>
+                      <td className="px-3 py-2 text-right text-xs font-medium">{po.total != null ? `${Number(po.total).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} ${po.currency || 'EUR'}` : '-'}</td>
                       <td className="px-3 py-2">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[po.status] || 'bg-slate-100 text-slate-600'}`}>
-                          {po.status || '—'}
+                          {po.status || '-'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500">{po.created_at ? new Date(po.created_at).toLocaleDateString('ro-RO') : po.date ? new Date(po.date).toLocaleDateString('ro-RO') : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500">{po.created_at ? new Date(po.created_at).toLocaleDateString('ro-RO') : po.date ? new Date(po.date).toLocaleDateString('ro-RO') : '-'}</td>
                     </tr>
                   )
                 })}
@@ -382,19 +442,50 @@ function SupplierSection({ companyId }) {
         )}
       </div>
 
-      {/* Supplied items */}
+      {/* Supplied items — proper table instead of tag cloud */}
       {itemsList.length > 0 && (
         <div>
           <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
             <Package size={14} /> Articole furnizate ({itemsList.length})
           </h4>
-          <div className="flex flex-wrap gap-2">
-            {itemsList.slice(0, 20).map(item => (
-              <span key={item.id} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
-                {item.code} — {item.name}
-              </span>
-            ))}
-            {itemsList.length > 20 && <span className="text-xs text-slate-400">+{itemsList.length - 20} altele</span>}
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Cod</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Denumire</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Pret unitar</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Ultima comanda</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Data livrare</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {itemsList.map(item => {
+                  const lastPurchase = item.purchase_history?.[0] || item.last_purchase || null
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono text-xs text-blue-600">{item.code || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-700">{item.name || '-'}</td>
+                      <td className="px-3 py-2 text-right text-xs font-medium">
+                        {item.unit_price != null
+                          ? `${Number(item.unit_price).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${item.currency || item.unit || 'EUR'}`
+                          : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500 font-mono">
+                        {lastPurchase?.po_number || lastPurchase?.order_number || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        {lastPurchase?.delivery_date
+                          ? new Date(lastPurchase.delivery_date).toLocaleDateString('ro-RO')
+                          : lastPurchase?.date
+                            ? new Date(lastPurchase.date).toLocaleDateString('ro-RO')
+                            : '-'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -451,93 +542,116 @@ function CompanyDetail({ company, onClose }) {
     },
   })
 
-  // Build tabs dynamically
-  const tabs = [['info', 'Informatii']]
-  if (isClient) tabs.push(['client', 'Comenzi client'])
-  if (isSupplier) tabs.push(['supplier', 'Achizitii'])
-  tabs.push(['contacts', 'Contacte'])
-  tabs.push(['documents', 'Documente'])
+  // Count data for tab badges
+  const contactsCount = company.contacts?.length || 0
+
+  // Build tabs dynamically with icons and counts
+  const tabDefs = [
+    { key: 'info', label: 'Informatii', icon: ClipboardList },
+  ]
+  if (isClient) tabDefs.push({ key: 'client', label: 'Comenzi', icon: ShoppingCart })
+  if (isSupplier) tabDefs.push({ key: 'supplier', label: 'Achizitii', icon: Truck })
+  tabDefs.push({ key: 'contacts', label: 'Contacte', icon: Users, count: contactsCount })
+  tabDefs.push({ key: 'documents', label: 'Documente', icon: FileText })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+      <div className="max-w-6xl mx-auto px-6 py-6">
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="font-semibold text-slate-800 text-lg">{company.name}</h3>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {types.map(t => (
-                <span key={t} className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[t] || 'bg-slate-100 text-slate-600'}`}>
-                  {TYPE_LABELS[t] || t}
-                </span>
-              ))}
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h2 className="font-bold text-slate-800 text-xl">{company.name}</h2>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {types.map(t => (
+                  <span key={t} className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${TYPE_COLORS[t] || 'bg-slate-100 text-slate-600'}`}>
+                    {TYPE_LABELS[t] || t}
+                  </span>
+                ))}
+                {company.city && (
+                  <span className="text-xs text-slate-400 ml-2">{company.city}</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setEditCompany(true)} className="btn-secondary text-xs flex items-center gap-1"><Pencil size={12} /> Editeaza</button>
             <button
               onClick={() => { if (confirm('Sigur doriti sa stergeti compania? Aceasta actiune este ireversibila.')) deleteCompanyMut.mutate() }}
-              className="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50"
+              className="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-2.5 py-1.5 hover:bg-red-50"
             >
               <Trash2 size={12} />
             </button>
-            <button onClick={onClose} className="btn-secondary text-xs">Inchide</button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-4 flex-wrap">
-          {tabs.map(([t, l]) => (
-            <button key={t} onClick={() => setDetailTab(t)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors
-                ${detailTab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              {l}
-            </button>
-          ))}
+        {/* Tabs with icons and counters */}
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-6 flex-wrap">
+          {tabDefs.map(t => {
+            const Icon = t.icon
+            return (
+              <button key={t.key} onClick={() => setDetailTab(t.key)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-medium transition-colors
+                  ${detailTab === t.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                <Icon size={14} />
+                {t.label}
+                {t.count !== undefined && t.count > 0 && (
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    detailTab === t.key ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Info tab */}
         {detailTab === 'info' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
               {company.fiscal_code && (
-                <div className="bg-slate-50 rounded-lg p-3">
+                <div className="bg-slate-50 rounded-lg p-4">
                   <span className="text-slate-400 text-xs block mb-0.5">CIF / Cod fiscal</span>
                   <p className="font-medium text-slate-800">{company.fiscal_code}</p>
                 </div>
               )}
               {company.trade_register && (
-                <div className="bg-slate-50 rounded-lg p-3">
+                <div className="bg-slate-50 rounded-lg p-4">
                   <span className="text-slate-400 text-xs block mb-0.5">Reg. comertului</span>
                   <p className="font-medium text-slate-800">{company.trade_register}</p>
                 </div>
               )}
               {(company.city || company.address) && (
-                <div className="bg-slate-50 rounded-lg p-3 col-span-2">
+                <div className="bg-slate-50 rounded-lg p-4 col-span-2 md:col-span-1">
                   <span className="text-slate-400 text-xs block mb-0.5">Adresa</span>
-                  <p className="font-medium text-slate-800">{[company.address, company.city].filter(Boolean).join(', ') || '—'}</p>
+                  <p className="font-medium text-slate-800">{[company.address, company.city].filter(Boolean).join(', ') || '-'}</p>
                 </div>
               )}
               {company.phone && (
-                <div className="bg-slate-50 rounded-lg p-3">
+                <div className="bg-slate-50 rounded-lg p-4">
                   <span className="text-slate-400 text-xs block mb-0.5">Telefon</span>
                   <p className="font-medium text-slate-800">{company.phone}</p>
                 </div>
               )}
               {company.email && (
-                <div className="bg-slate-50 rounded-lg p-3">
+                <div className="bg-slate-50 rounded-lg p-4">
                   <span className="text-slate-400 text-xs block mb-0.5">Email</span>
                   <p className="font-medium text-slate-800">{company.email}</p>
                 </div>
               )}
               {company.website && (
-                <div className="bg-slate-50 rounded-lg p-3">
+                <div className="bg-slate-50 rounded-lg p-4">
                   <span className="text-slate-400 text-xs block mb-0.5">Website</span>
                   <p className="font-medium text-slate-800">{company.website}</p>
                 </div>
               )}
               {company.payment_terms_days && (
-                <div className="bg-slate-50 rounded-lg p-3">
+                <div className="bg-slate-50 rounded-lg p-4">
                   <span className="text-slate-400 text-xs block mb-0.5">Termen plata</span>
                   <p className="font-medium text-slate-800">{company.payment_terms_days} zile</p>
                 </div>
@@ -548,7 +662,7 @@ function CompanyDetail({ company, onClose }) {
 
         {/* Client tab */}
         {detailTab === 'client' && isClient && (
-          <ClientSection companyId={company.id} />
+          <ClientSection companyId={company.id} contacts={company.contacts} />
         )}
 
         {/* Supplier tab */}
@@ -559,14 +673,16 @@ function CompanyDetail({ company, onClose }) {
         {/* Contacts tab */}
         {detailTab === 'contacts' && (
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-medium text-slate-700">Contacte</h4>
-              <button onClick={() => setAddContact(!addContact)} className="text-xs text-blue-500 hover:text-blue-700">+ Adauga</button>
+              <button onClick={() => setAddContact(!addContact)} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+                <Plus size={12} /> Adauga contact
+              </button>
             </div>
 
             {addContact && (
-              <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
+              <div className="bg-slate-50 rounded-lg p-4 mb-4 space-y-2">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Nume *</label>
                     <input className="input text-xs" placeholder="Ex: Ion Popescu" value={contactForm.fullName} onChange={fc('fullName')} />
@@ -598,7 +714,7 @@ function CompanyDetail({ company, onClose }) {
             {company.contacts?.length === 0 && <p className="text-slate-400 text-sm">Fara contacte.</p>}
             <div className="space-y-2">
               {company.contacts?.map(c => (
-                <div key={c.id} className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-3">
+                <div key={c.id} className="bg-slate-50 rounded-lg px-4 py-3 flex items-center gap-3">
                   {c.is_primary && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 rounded">principal</span>}
                   <div className="flex-1">
                     <span className="font-medium text-slate-800 text-sm">{c.full_name}</span>
@@ -699,8 +815,8 @@ export default function CompaniesPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs hidden md:table-cell">{c.fiscal_code || '—'}</td>
-                  <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{c.city || '—'}</td>
+                  <td className="px-4 py-3 text-slate-400 text-xs hidden md:table-cell">{c.fiscal_code || '-'}</td>
+                  <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{c.city || '-'}</td>
                   <td className="px-4 py-3 text-right">
                     <ChevronRight size={14} className="text-slate-300 ml-auto" />
                   </td>

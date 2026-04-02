@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import {
   ClipboardCheck, Ruler, BarChart3, AlertTriangle, ShieldCheck,
-  Plus, X, Check, XCircle, ChevronDown, Trash2, ArrowRight, FileText
+  Plus, X, Check, XCircle, ChevronDown, Trash2, ArrowRight, FileText,
+  Clock, CheckCircle2, Eye, Play, Flag
 } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 
@@ -37,6 +38,15 @@ const CAPA_STATUS_COLORS = {
   verified: 'bg-emerald-50 text-emerald-700',
   closed: 'bg-slate-100 text-slate-600',
   not_effective: 'bg-red-50 text-red-700',
+}
+
+const CAPA_STATUS_LABELS = {
+  open: 'Creat',
+  in_progress: 'In lucru',
+  completed: 'Completat',
+  verified: 'Verificat',
+  closed: 'Inchis',
+  not_effective: 'Neefectiv',
 }
 
 const RESULT_COLORS = {
@@ -560,7 +570,7 @@ function MeasurementForm({ plans, selectedPlanId, setSelectedPlanId, selectedCha
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// SPC TAB
+// SPC TAB — Fixed: characteristic dropdown from measurement plan
 // ════════════════════════════════════════════════════════════════════════
 
 function SPCTab() {
@@ -568,9 +578,43 @@ function SPCTab() {
   const [characteristic, setCharacteristic] = useState('')
   const [spcData, setSpcData] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [planCharacteristics, setPlanCharacteristics] = useState([])
+  const [loadingChars, setLoadingChars] = useState(false)
+
+  // When product changes, fetch its measurement plan and extract characteristics
+  useEffect(() => {
+    if (!productId) {
+      setPlanCharacteristics([])
+      setCharacteristic('')
+      return
+    }
+    setLoadingChars(true)
+    setPlanCharacteristics([])
+    setCharacteristic('')
+    api.get('/quality/plans', { params: { productId, limit: 50 } })
+      .then(r => {
+        const plans = r.data?.data || r.data || []
+        const allChars = []
+        const seen = new Set()
+        plans.forEach(plan => {
+          const chars = typeof plan.characteristics === 'string'
+            ? JSON.parse(plan.characteristics)
+            : (plan.characteristics || [])
+          chars.forEach(ch => {
+            if (ch.name && !seen.has(ch.name)) {
+              seen.add(ch.name)
+              allChars.push(ch)
+            }
+          })
+        })
+        setPlanCharacteristics(allChars)
+      })
+      .catch(() => setPlanCharacteristics([]))
+      .finally(() => setLoadingChars(false))
+  }, [productId])
 
   async function handleCalculate() {
-    if (!productId || !characteristic) return toast.error('Completeaza produs ID si caracteristica')
+    if (!productId || !characteristic) return toast.error('Selecteaza produs si caracteristica')
     setLoading(true)
     setSpcData(null)
     try {
@@ -614,14 +658,48 @@ function SPCTab() {
             allowCreate={false}
           />
         </div>
-        <div>
+        <div className="w-56">
           <label className="block text-sm text-slate-600 mb-1">Caracteristica</label>
-          <input className="input w-48" value={characteristic} onChange={e => setCharacteristic(e.target.value)} placeholder="ex: Diametru" />
+          {loadingChars ? (
+            <div className="input w-full flex items-center text-slate-400 text-sm">Se incarca...</div>
+          ) : planCharacteristics.length > 0 ? (
+            <select
+              className="input w-full"
+              value={characteristic}
+              onChange={e => setCharacteristic(e.target.value)}
+            >
+              <option value="">-- Selecteaza caracteristica --</option>
+              {planCharacteristics.map(ch => (
+                <option key={ch.name} value={ch.name}>
+                  {ch.name} ({ch.nominal}{ch.unit ? ` ${ch.unit}` : ''})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="input w-full flex items-center text-slate-400 text-sm">
+              {productId ? 'Niciun plan gasit' : 'Selecteaza produs mai intai'}
+            </div>
+          )}
         </div>
-        <button onClick={handleCalculate} disabled={loading} className="btn-primary flex items-center gap-1">
+        <button onClick={handleCalculate} disabled={loading || !productId || !characteristic} className="btn-primary flex items-center gap-1">
           <BarChart3 size={14} /> {loading ? 'Se calculeaza...' : 'Calculeaza SPC'}
         </button>
       </div>
+
+      {/* Selected characteristic info */}
+      {characteristic && planCharacteristics.length > 0 && (() => {
+        const sel = planCharacteristics.find(c => c.name === characteristic)
+        if (!sel) return null
+        return (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-4 text-sm">
+            <span className="font-medium text-blue-800">{sel.name}</span>
+            <span className="text-blue-600">Nominal: {sel.nominal} {sel.unit}</span>
+            <span className="text-green-600">+{sel.upper_tolerance}</span>
+            <span className="text-red-600">-{Math.abs(sel.lower_tolerance)}</span>
+            {sel.is_critical && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">CRITIC</span>}
+          </div>
+        )
+      })()}
 
       {spcData && (
         <div className="space-y-4">
@@ -812,7 +890,7 @@ function ControlChart({ dataPoints, ucl, lcl, mean }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// NCR TAB
+// NCR TAB — Fixed: order-based product filtering + full detail view
 // ════════════════════════════════════════════════════════════════════════
 
 function NCRTab() {
@@ -961,6 +1039,26 @@ function CreateNCRModal({ onClose, onSubmit, loading }) {
     title: '', ncr_type: 'internal', severity: 'minor', description: '',
     product_id: '', order_id: '', affected_qty: '',
   })
+  const [orderProduct, setOrderProduct] = useState(null)
+
+  // When order is selected, fetch order details to filter product
+  useEffect(() => {
+    if (!form.order_id) {
+      setOrderProduct(null)
+      return
+    }
+    api.get(`/work-orders/${form.order_id}`)
+      .then(r => {
+        const wo = r.data
+        if (wo.product_id) {
+          setOrderProduct({ id: wo.product_id, name: wo.product_name || wo.product || '', reference: wo.product_reference || '' })
+          setForm(f => ({ ...f, product_id: wo.product_id }))
+        } else {
+          setOrderProduct(null)
+        }
+      })
+      .catch(() => setOrderProduct(null))
+  }, [form.order_id])
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -1006,18 +1104,6 @@ function CreateNCRModal({ onClose, onSubmit, loading }) {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Produs</label>
-              <SearchableSelect
-                endpoint="/bom/products"
-                labelField="name"
-                valueField="id"
-                placeholder="Cauta produs..."
-                value={form.product_id}
-                onChange={(id) => setForm(f => ({ ...f, product_id: id }))}
-                allowCreate={false}
-              />
-            </div>
-            <div>
               <label className="block text-sm text-slate-600 mb-1">Comanda</label>
               <SearchableSelect
                 endpoint="/work-orders"
@@ -1025,9 +1111,33 @@ function CreateNCRModal({ onClose, onSubmit, loading }) {
                 valueField="id"
                 placeholder="Cauta comanda..."
                 value={form.order_id}
-                onChange={(id) => setForm(f => ({ ...f, order_id: id }))}
+                onChange={(id) => setForm(f => ({ ...f, order_id: id || '', product_id: id ? f.product_id : '' }))}
                 allowCreate={false}
               />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-600 mb-1">Produs</label>
+              {orderProduct ? (
+                <div className="input w-full flex items-center justify-between bg-slate-50">
+                  <span className="text-xs text-slate-700 truncate">
+                    {orderProduct.reference ? `${orderProduct.reference} - ` : ''}{orderProduct.name || 'Produs din comanda'}
+                  </span>
+                  <button type="button" onClick={() => { setOrderProduct(null); setForm(f => ({ ...f, product_id: '', order_id: '' })) }}
+                    className="text-slate-400 hover:text-slate-600 ml-1 shrink-0">
+                    <X size={12} />
+                  </button>
+                </div>
+              ) : (
+                <SearchableSelect
+                  endpoint="/bom/products"
+                  labelField="name"
+                  valueField="id"
+                  placeholder="Cauta produs..."
+                  value={form.product_id}
+                  onChange={(id) => setForm(f => ({ ...f, product_id: id || '' }))}
+                  allowCreate={false}
+                />
+              )}
             </div>
             <div>
               <label className="block text-sm text-slate-600 mb-1">Cant. afectata</label>
@@ -1051,29 +1161,115 @@ function NCRDetailModal({ ncr, onClose, onUpdate, onCloseNCR, loadingUpdate, loa
   const [disposition, setDisposition] = useState(ncr.disposition || '')
   const [status, setStatus] = useState(ncr.status)
 
+  // Fetch full NCR detail with order/product info
+  const { data: ncrDetail } = useQuery({
+    queryKey: ['ncr-detail', ncr.id],
+    queryFn: () => api.get(`/quality/ncr/${ncr.id}`).then(r => r.data),
+  })
+
+  // Fetch order details if available
+  const orderId = ncrDetail?.order_id || ncr.order_id
+  const { data: orderDetail } = useQuery({
+    queryKey: ['work-order-for-ncr', orderId],
+    queryFn: () => api.get(`/work-orders/${orderId}`).then(r => r.data),
+    enabled: !!orderId,
+  })
+
+  // Fetch product details if available
+  const productId = ncrDetail?.product_id || ncr.product_id
+  const { data: productDetail } = useQuery({
+    queryKey: ['product-for-ncr', productId],
+    queryFn: () => api.get(`/bom/products/${productId}`).then(r => r.data),
+    enabled: !!productId,
+  })
+
+  const detail = ncrDetail || ncr
   const isClosed = ncr.status === 'closed'
+  const clientName = orderDetail?.client_name || orderDetail?.client || orderDetail?.company_name || ''
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">{ncr.ncr_number}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
 
-        <div className="space-y-3 text-sm">
-          <div className="flex gap-2">
+        <div className="space-y-4 text-sm">
+          {/* Status badges */}
+          <div className="flex gap-2 flex-wrap">
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${SEVERITY_COLORS[ncr.severity]}`}>{ncr.severity}</span>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${NCR_STATUS_COLORS[ncr.status]}`}>{ncr.status}</span>
             <span className="px-2 py-0.5 rounded text-xs bg-slate-100">{ncr.ncr_type}</span>
           </div>
 
+          {/* Title and description */}
           <div>
-            <p className="font-medium">{ncr.title}</p>
-            {ncr.description && <p className="text-slate-500 mt-1">{ncr.description}</p>}
+            <p className="font-medium text-base">{detail.title}</p>
+            {detail.description && <p className="text-slate-500 mt-1">{detail.description}</p>}
           </div>
 
-          {ncr.affected_qty && <p className="text-slate-500">Cantitate afectata: <strong>{ncr.affected_qty}</strong></p>}
+          {/* Full information grid */}
+          <div className="grid grid-cols-2 gap-3 bg-slate-50 rounded-lg p-4">
+            {clientName && (
+              <div>
+                <span className="text-xs text-slate-400 block">Client</span>
+                <p className="font-medium text-slate-800">{clientName}</p>
+              </div>
+            )}
+            {orderDetail && (
+              <div>
+                <span className="text-xs text-slate-400 block">Comanda</span>
+                <p className="font-medium text-slate-800 font-mono">
+                  {orderDetail.work_order_number || orderDetail.order_number || orderDetail.wo_number || '-'}
+                </p>
+              </div>
+            )}
+            {productDetail && (
+              <div>
+                <span className="text-xs text-slate-400 block">Reper</span>
+                <p className="font-medium text-slate-800">
+                  {productDetail.reference && <span className="text-blue-600 font-mono">{productDetail.reference}</span>}
+                  {productDetail.reference && productDetail.name && ' - '}
+                  {productDetail.name}
+                </p>
+              </div>
+            )}
+            {detail.lot_number && (
+              <div>
+                <span className="text-xs text-slate-400 block">Lot</span>
+                <p className="font-medium text-slate-800">{detail.lot_number}</p>
+              </div>
+            )}
+            {detail.affected_qty && (
+              <div>
+                <span className="text-xs text-slate-400 block">Cantitate afectata</span>
+                <p className="font-medium text-slate-800">{detail.affected_qty}</p>
+              </div>
+            )}
+            <div>
+              <span className="text-xs text-slate-400 block">Data creare</span>
+              <p className="font-medium text-slate-800">{new Date(detail.created_at).toLocaleString('ro-RO')}</p>
+            </div>
+          </div>
+
+          {/* Root cause and disposition (always show if available) */}
+          {(detail.root_cause || detail.disposition) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+              {detail.root_cause && (
+                <div>
+                  <span className="text-xs font-medium text-amber-700 block">Cauza radacina</span>
+                  <p className="text-slate-800">{detail.root_cause}</p>
+                </div>
+              )}
+              {detail.disposition && (
+                <div>
+                  <span className="text-xs font-medium text-amber-700 block">Dispozitie</span>
+                  <p className="text-slate-800">{detail.disposition}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {!isClosed && (
             <>
@@ -1122,8 +1318,6 @@ function NCRDetailModal({ ncr, onClose, onUpdate, onCloseNCR, loadingUpdate, loa
 
           {isClosed && (
             <div className="bg-slate-50 rounded-lg p-3 space-y-2">
-              {ncr.root_cause && <p><strong>Cauza radacina:</strong> {ncr.root_cause}</p>}
-              {ncr.disposition && <p><strong>Dispozitie:</strong> {ncr.disposition}</p>}
               {ncr.closed_at && <p className="text-xs text-slate-400">Inchis la: {new Date(ncr.closed_at).toLocaleString('ro-RO')}</p>}
             </div>
           )}
@@ -1134,14 +1328,179 @@ function NCRDetailModal({ ncr, onClose, onUpdate, onCloseNCR, loadingUpdate, loa
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// CAPA TAB
+// CAPA TAB — Fixed: actionable buttons, NCR context, timeline
 // ════════════════════════════════════════════════════════════════════════
+
+const CAPA_TIMELINE_STEPS = [
+  { key: 'open', label: 'Creat' },
+  { key: 'in_progress', label: 'In lucru' },
+  { key: 'completed', label: 'Completat' },
+  { key: 'verified', label: 'Verificat' },
+  { key: 'closed', label: 'Inchis' },
+]
+
+function CAPATimeline({ status }) {
+  const statusOrder = ['open', 'in_progress', 'completed', 'verified', 'closed']
+  const currentIdx = statusOrder.indexOf(status)
+  const isNotEffective = status === 'not_effective'
+
+  return (
+    <div className="flex items-center gap-1 py-2">
+      {CAPA_TIMELINE_STEPS.map((step, idx) => {
+        const isCompleted = idx <= currentIdx
+        const isCurrent = idx === currentIdx
+        return (
+          <div key={step.key} className="flex items-center gap-1">
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+              isCurrent ? 'bg-blue-600 text-white' :
+              isCompleted ? 'bg-green-100 text-green-700' :
+              'bg-slate-100 text-slate-400'
+            }`}>
+              {isCompleted && !isCurrent && <CheckCircle2 size={12} />}
+              {isCurrent && <Clock size={12} />}
+              {step.label}
+            </div>
+            {idx < CAPA_TIMELINE_STEPS.length - 1 && (
+              <ArrowRight size={12} className={`${isCompleted ? 'text-green-400' : 'text-slate-300'}`} />
+            )}
+          </div>
+        )
+      })}
+      {isNotEffective && (
+        <div className="flex items-center gap-1 ml-2">
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Neefectiv</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CAPADetailPanel({ capa, ncrList, onUpdate, onVerify, loadingUpdate, loadingVerify }) {
+  // Find linked NCR
+  const linkedNCR = ncrList.find(n => n.id === capa.ncr_id)
+
+  // Fetch full NCR detail if linked
+  const { data: ncrDetail } = useQuery({
+    queryKey: ['ncr-for-capa', capa.ncr_id],
+    queryFn: () => api.get(`/quality/ncr/${capa.ncr_id}`).then(r => r.data),
+    enabled: !!capa.ncr_id,
+  })
+
+  const ncrInfo = ncrDetail || linkedNCR
+
+  return (
+    <div className="border-t border-slate-200 mt-2 pt-3 space-y-3">
+      {/* Timeline */}
+      <CAPATimeline status={capa.status} />
+
+      {/* NCR context */}
+      {ncrInfo && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+          <p className="text-xs font-medium text-orange-600 mb-1">Problema gasita (NCR):</p>
+          <p className="text-sm font-medium text-slate-800">
+            {ncrInfo.ncr_number && <span className="font-mono text-orange-700">{ncrInfo.ncr_number}</span>}
+            {' '}{ncrInfo.title}
+          </p>
+          {ncrInfo.description && (
+            <p className="text-xs text-slate-600 mt-1">{ncrInfo.description}</p>
+          )}
+          <div className="flex gap-2 mt-2">
+            {ncrInfo.severity && (
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${SEVERITY_COLORS[ncrInfo.severity]}`}>{ncrInfo.severity}</span>
+            )}
+            {ncrInfo.root_cause && (
+              <span className="text-xs text-slate-500">Cauza: {ncrInfo.root_cause}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Description */}
+      {capa.description && (
+        <div className="bg-slate-50 rounded-lg p-3">
+          <p className="text-xs font-medium text-slate-500 mb-1">Descriere actiune:</p>
+          <p className="text-sm text-slate-700">{capa.description}</p>
+        </div>
+      )}
+
+      {/* Action buttons with helper text */}
+      <div className="space-y-2">
+        {capa.status === 'open' && (
+          <button
+            onClick={() => onUpdate({ id: capa.id, body: { status: 'in_progress' } })}
+            disabled={loadingUpdate}
+            className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors text-left"
+          >
+            <Play size={18} className="text-amber-600 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Incepe actiunea</p>
+              <p className="text-xs text-amber-600">Marcheaza ca ai inceput sa lucrezi la aceasta actiune corectiva/preventiva</p>
+            </div>
+          </button>
+        )}
+        {capa.status === 'in_progress' && (
+          <button
+            onClick={() => onUpdate({ id: capa.id, body: { status: 'completed' } })}
+            disabled={loadingUpdate}
+            className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-colors text-left"
+          >
+            <CheckCircle2 size={18} className="text-green-600 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Finalizeaza</p>
+              <p className="text-xs text-green-600">Actiunea a fost implementata si asteapta verificarea eficacitatii</p>
+            </div>
+          </button>
+        )}
+        {capa.status === 'completed' && (
+          <div className="space-y-2">
+            <button
+              onClick={() => onVerify({ id: capa.id, body: { is_effective: true } })}
+              disabled={loadingVerify}
+              className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-colors text-left"
+            >
+              <ShieldCheck size={18} className="text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-emerald-800">Verifica eficacitate - EFICACE</p>
+                <p className="text-xs text-emerald-600">Confirma ca actiunea implementata a rezolvat problema si este eficace</p>
+              </div>
+            </button>
+            <button
+              onClick={() => onVerify({ id: capa.id, body: { is_effective: false } })}
+              disabled={loadingVerify}
+              className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-left"
+            >
+              <XCircle size={18} className="text-red-600 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-800">Verifica eficacitate - NEEFICACE</p>
+                <p className="text-xs text-red-600">Actiunea nu a rezolvat problema, necesita re-deschidere sau actiune noua</p>
+              </div>
+            </button>
+          </div>
+        )}
+        {capa.status === 'verified' && (
+          <button
+            onClick={() => onUpdate({ id: capa.id, body: { status: 'closed' } })}
+            disabled={loadingUpdate}
+            className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+          >
+            <Flag size={18} className="text-slate-600 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-slate-800">Inchide CAPA</p>
+              <p className="text-xs text-slate-600">Actiunea este verificata si poate fi inchisa definitiv</p>
+            </div>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function CAPATab() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
   const [page, setPage] = useState(1)
+  const [expandedId, setExpandedId] = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['quality-capa', filterStatus, page],
@@ -1215,99 +1574,61 @@ function CAPATab() {
       {isLoading ? (
         <p className="text-slate-400 text-sm">Se incarca...</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-slate-500">
-                <th className="pb-2 pr-4">Nr. CAPA</th>
-                <th className="pb-2 pr-4">Titlu</th>
-                <th className="pb-2 pr-4">Tip</th>
-                <th className="pb-2 pr-4">NCR</th>
-                <th className="pb-2 pr-4">Status</th>
-                <th className="pb-2 pr-4">Deadline</th>
-                <th className="pb-2">Actiuni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {capaList.map(c => {
-                const overdue = isOverdue(c)
-                return (
-                  <tr key={c.id} className={`border-b border-slate-100 hover:bg-slate-50 ${overdue ? 'bg-red-50/30' : ''}`}>
-                    <td className="py-2 pr-4 font-mono font-medium text-xs">{c.capa_number}</td>
-                    <td className="py-2 pr-4">{c.title}</td>
-                    <td className="py-2 pr-4">
+        <div className="space-y-2">
+          {capaList.map(c => {
+            const overdue = isOverdue(c)
+            const isExpanded = expandedId === c.id
+            const linkedNCR = ncrList.find(n => n.id === c.ncr_id)
+            return (
+              <div key={c.id} className={`border rounded-xl p-4 transition-colors ${overdue ? 'border-red-200 bg-red-50/30' : 'border-slate-200 bg-white'} ${isExpanded ? 'ring-1 ring-blue-200' : ''}`}>
+                <div
+                  className="flex items-center gap-3 cursor-pointer"
+                  onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono font-medium text-xs text-slate-500">{c.capa_number}</span>
                       <span className={`text-xs px-2 py-0.5 rounded ${c.capa_type === 'corrective' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
                         {c.capa_type === 'corrective' ? 'Corectiva' : 'Preventiva'}
                       </span>
-                    </td>
-                    <td className="py-2 pr-4 text-xs text-slate-400 font-mono">
-                      {c.ncr_id ? c.ncr_id.substring(0, 8) : '-'}
-                    </td>
-                    <td className="py-2 pr-4">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${CAPA_STATUS_COLORS[c.status] || ''}`}>
-                        {c.status}
+                        {CAPA_STATUS_LABELS[c.status] || c.status}
                       </span>
-                    </td>
-                    <td className="py-2 pr-4 text-xs">
-                      {c.deadline ? (
-                        <span className={overdue ? 'text-red-600 font-medium' : 'text-slate-500'}>
-                          {new Date(c.deadline).toLocaleDateString('ro-RO')}
-                          {overdue && ' (depasit!)'}
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="py-2">
-                      <div className="flex gap-1">
-                        {c.status === 'open' && (
-                          <button
-                            onClick={() => updateMut.mutate({ id: c.id, body: { status: 'in_progress' } })}
-                            className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded hover:bg-amber-100"
-                          >
-                            Start
-                          </button>
-                        )}
-                        {c.status === 'in_progress' && (
-                          <button
-                            onClick={() => updateMut.mutate({ id: c.id, body: { status: 'completed' } })}
-                            className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded hover:bg-green-100"
-                          >
-                            Completeaza
-                          </button>
-                        )}
-                        {c.status === 'completed' && (
-                          <>
-                            <button
-                              onClick={() => verifyMut.mutate({ id: c.id, body: { is_effective: true } })}
-                              className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded hover:bg-emerald-100"
-                            >
-                              Verifica OK
-                            </button>
-                            <button
-                              onClick={() => verifyMut.mutate({ id: c.id, body: { is_effective: false } })}
-                              className="text-xs bg-red-50 text-red-700 px-2 py-0.5 rounded hover:bg-red-100"
-                            >
-                              Neefectiv
-                            </button>
-                          </>
-                        )}
-                        {c.status === 'verified' && (
-                          <button
-                            onClick={() => updateMut.mutate({ id: c.id, body: { status: 'closed' } })}
-                            className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded hover:bg-slate-200"
-                          >
-                            Inchide
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {capaList.length === 0 && (
-                <tr><td colSpan={7} className="py-8 text-center text-slate-400">Niciun CAPA gasit.</td></tr>
-              )}
-            </tbody>
-          </table>
+                      {overdue && <span className="text-xs text-red-600 font-medium">DEPASIT!</span>}
+                    </div>
+                    <p className="font-medium text-slate-800 text-sm">{c.title}</p>
+                    {linkedNCR && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        NCR: {linkedNCR.ncr_number} - {linkedNCR.title}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    {c.deadline && (
+                      <p className={`text-xs ${overdue ? 'text-red-600 font-medium' : 'text-slate-500'}`}>
+                        Deadline: {new Date(c.deadline).toLocaleDateString('ro-RO')}
+                      </p>
+                    )}
+                    <ChevronDown size={16} className={`text-slate-400 ml-auto mt-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <CAPADetailPanel
+                    capa={c}
+                    ncrList={ncrList}
+                    onUpdate={({ id, body }) => updateMut.mutate({ id, body })}
+                    onVerify={({ id, body }) => verifyMut.mutate({ id, body })}
+                    loadingUpdate={updateMut.isPending}
+                    loadingVerify={verifyMut.isPending}
+                  />
+                )}
+              </div>
+            )
+          })}
+          {capaList.length === 0 && (
+            <div className="py-8 text-center text-slate-400">Niciun CAPA gasit.</div>
+          )}
           {pagination.total > 0 && (
             <div className="flex items-center justify-between mt-3">
               <p className="text-xs text-slate-400">Total: {pagination.total}</p>
