@@ -133,6 +133,7 @@ const ALL_MENUS = {
         { id: 'adm-prod-reports', label: 'Raportare', path: '/production', permission: null },
         { id: 'adm-prod-orders', label: 'Comenzi lucru', path: '/work-orders', permission: null },
         { id: 'adm-prod-rework', label: 'Reprelucrare', path: '/rework', permission: null },
+        { id: 'adm-prod-contracts', label: 'Contracte cadru', path: '/contracts', permission: null },
         { id: 'adm-prod-instructions', label: 'Instructiuni', path: '/work-instructions', permission: null },
         { id: 'adm-prod-checklists', label: 'Checklists', path: '/checklists', permission: null },
       ]

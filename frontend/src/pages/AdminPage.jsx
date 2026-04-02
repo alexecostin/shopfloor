@@ -51,7 +51,7 @@ function OrgTab() {
   const [showAddType, setShowAddType] = useState(false);
   const [editUnit, setEditUnit] = useState(null);
   const [form, setForm] = useState({ name: '', unit_type: 'factory', code: '', level: 1 });
-  const [editForm, setEditForm] = useState({ name: '', code: '', unit_type: '', timezone: '' });
+  const [editForm, setEditForm] = useState({ name: '', code: '', unit_type: '', timezone: '', operator_allocation_mode: '' });
   const [typeForm, setTypeForm] = useState({ type_code: '', type_label: '', level: 1 });
 
   const create = useMutation({
@@ -80,7 +80,7 @@ function OrgTab() {
 
   function openEdit(unit) {
     setEditUnit(unit);
-    setEditForm({ name: unit.name || '', code: unit.code || '', unit_type: unit.unit_type || '', timezone: unit.settings?.timezone || '' });
+    setEditForm({ name: unit.name || '', code: unit.code || '', unit_type: unit.unit_type || '', timezone: unit.settings?.timezone || '', operator_allocation_mode: unit.operator_allocation_mode || '' });
   }
 
   function OrgNode({ unit, depth = 0 }) {
@@ -171,9 +171,24 @@ function OrgTab() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Mod alocare operatori</label>
+                <select value={editForm.operator_allocation_mode} onChange={e => setEditForm(p => ({...p, operator_allocation_mode: e.target.value}))} className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">-- Selecteaza --</option>
+                  <option value="per_machine">Per masina</option>
+                  <option value="per_zone">Per zona</option>
+                  <option value="per_line">Per linie</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {editForm.operator_allocation_mode === 'per_machine' && 'Un operator = o masina. Fiecare operator opereaza exclusiv pe masina alocata.'}
+                  {editForm.operator_allocation_mode === 'per_zone' && 'Un operator = supravegheaza N masini din zona. Operatorul monitorizeaza mai multe masini simultan.'}
+                  {editForm.operator_allocation_mode === 'per_line' && 'Un operator = supervizare linie automata. Linia functioneaza automat, operatorul intervine la nevoie.'}
+                  {!editForm.operator_allocation_mode && 'Selecteaza modul in care operatorii sunt alocati in aceasta unitate.'}
+                </p>
+              </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={() => updateUnit.mutate({ id: editUnit.id, name: editForm.name, code: editForm.code, unit_type: editForm.unit_type, settings: { timezone: editForm.timezone } })} disabled={updateUnit.isPending} className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+              <button onClick={() => updateUnit.mutate({ id: editUnit.id, name: editForm.name, code: editForm.code, unit_type: editForm.unit_type, operator_allocation_mode: editForm.operator_allocation_mode || null, settings: { timezone: editForm.timezone } })} disabled={updateUnit.isPending} className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
                 {updateUnit.isPending ? 'Se salveaza...' : 'Salveaza'}
               </button>
               <button onClick={() => setEditUnit(null)} className="flex-1 py-2 bg-slate-100 text-slate-700 text-sm rounded-lg hover:bg-slate-200">Anuleaza</button>

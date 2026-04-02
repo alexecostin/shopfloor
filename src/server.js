@@ -47,6 +47,7 @@ import documentsRoutes from './modules/documents/documents.routes.js';
 import supplierScorecardRoutes from './modules/suppliers/supplier-scorecard.routes.js';
 import integrationsRoutes from './modules/integrations/integrations.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
+import contractsRoutes from './modules/contracts/contracts.routes.js';
 import { checkAllRules } from './services/alert-engine.service.js';
 import { processHeartbeat, checkAllLicenses } from './services/license.service.js';
 
@@ -129,6 +130,7 @@ app.use('/api/v1/documents', documentsRoutes);
 app.use('/api/v1/suppliers', supplierScorecardRoutes);
 app.use('/api/v1/integrations', integrationsRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/contracts', contractsRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,6 +1,7 @@
 import db from '../config/db.js';
 import { aggregatePiecesFromOrders } from './piece-planning.service.js';
 import { getTenantConfig } from './app-config.service.js';
+import { getCertifiedOperators } from './certification.service.js';
 
 /**
  * Smart Auto-Scheduling Algorithm.
@@ -105,12 +106,43 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
         continue;
       }
 
+      // ── Certification check: verify at least 1 certified operator is available ──
+      if (targetMachine.id) {
+        try {
+          const certifiedOps = await getCertifiedOperators(targetMachine.id);
+          if (certifiedOps.length === 0) {
+            warnings.push({ piece: piece.productReference, operation: op.operation_name, message: `Niciun operator certificat pe ${targetMachine.code}` });
+          }
+        } catch (_e) { /* certification table may not exist yet */ }
+      }
+
+      // ── Operator requirements ──
+      const requiredOperators = Number(op.required_operators) || 1;
+      const involvementPct = Number(op.operator_involvement_percent) || 100;
+      if (requiredOperators > 1) {
+        // Check if enough operators could be available (heuristic: count active users)
+        try {
+          const activeUsers = await db('auth.users').where('is_active', true).count('* as n').first();
+          if (Number(activeUsers?.n || 0) < requiredOperators) {
+            warnings.push({ piece: piece.productReference, operation: op.operation_name, message: `Necesita ${requiredOperators} operatori, dar sunt doar ${activeUsers?.n || 0} activi` });
+          }
+        } catch (_e) { /* ignore */ }
+      }
+      // Operator involvement: if supervision at e.g. 30%, one operator can supervise ~3 machines
+      const supervisedMachineCapacity = involvementPct > 0 ? Math.floor(100 / involvementPct) : 1;
+
+      // ── Scrap adjustment: increase quantity to account for scrap losses ──
+      const scrapPct = Number(op.scrap_percent) || 0;
+      const adjustedQuantity = scrapPct > 0 && scrapPct < 100
+        ? Math.ceil(piece.remainingQuantity / (1 - scrapPct / 100))
+        : piece.remainingQuantity;
+
       // Calculate hours needed (nr_cavities: multiple pieces per cycle)
       const cycleTime = Number(op.cycle_time_seconds) || 60;
       const setupTime = Number(op.setup_time_minutes) || 0;
       const nrCavities = Number(op.nr_cavities) || 1;
       const effectivePiecesPerCycle = nrCavities;
-      const totalCycles = Math.ceil(piece.remainingQuantity / effectivePiecesPerCycle);
+      const totalCycles = Math.ceil(adjustedQuantity / effectivePiecesPerCycle);
       const totalHours = (totalCycles * cycleTime / 3600) + (setupTime / 60);
 
       // Find available date on this machine
@@ -148,6 +180,12 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
             setupMinutes: remainingHours === totalHours ? setupTime : 0, // setup only on first day
             lotTransfer,
             orderIds: piece.orders.map(o => o.id),
+            requiredOperators,
+            operatorInvolvement: op.operator_involvement || 'active',
+            operatorInvolvementPercent: involvementPct,
+            supervisedMachineCapacity,
+            adjustedQtyForScrap: adjustedQuantity,
+            scrapPercent: scrapPct,
           });
 
           addToSchedule(targetMachine.id, dateStr, dayAvailable);

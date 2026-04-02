@@ -92,9 +92,30 @@ function LineModal({ poId, editLine, onClose }) {
   const isEdit = !!editLine
   const [form, setForm] = useState(
     isEdit
-      ? { itemId: editLine.item_id || null, description: editLine.description || '', quantity: editLine.quantity || '', unit: editLine.unit || 'buc', unitPrice: editLine.unit_price || '' }
-      : { itemId: null, description: '', quantity: '', unit: 'buc', unitPrice: '' }
+      ? { itemId: editLine.item_id || null, description: editLine.description || '', quantity: editLine.quantity || '', unit: editLine.unit || 'buc', unitPrice: editLine.unit_price || '', lineType: editLine.line_type || 'material', operationId: editLine.operation_id || null }
+      : { itemId: null, description: '', quantity: '', unit: 'buc', unitPrice: '', lineType: 'material', operationId: null }
   )
+
+  // Fetch BOM operations for service type
+  const { data: opsData } = useQuery({
+    queryKey: ['bom-operations-all'],
+    queryFn: () => api.get('/bom/products').then(r => r.data).then(async (products) => {
+      const prods = products?.data || products || []
+      const allOps = []
+      for (const p of prods.slice(0, 50)) {
+        try {
+          const ops = await api.get(`/bom/products/${p.id}/operations`).then(r => r.data)
+          for (const op of (ops || [])) {
+            allOps.push({ ...op, product_name: p.name, product_reference: p.reference })
+          }
+        } catch { /* ignore */ }
+      }
+      return allOps
+    }),
+    enabled: form.lineType === 'service',
+    staleTime: 60000,
+  })
+  const operations = opsData || []
 
   const mutation = useMutation({
     mutationFn: (data) => isEdit
@@ -112,28 +133,75 @@ function LineModal({ poId, editLine, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza linie' : 'Adauga linie'}</h3>
         <div className="space-y-3">
+          {/* Line type selector */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Articol din inventar - cauta si selecteaza un material existent</label>
-            <SearchableSelect
-              endpoint="/inventory/items"
-              labelField="name"
-              valueField="id"
-              placeholder="Cauta articol dupa cod sau denumire..."
-              value={form.itemId}
-              onChange={(id, item) => setForm(f => ({
-                ...f,
-                itemId: id,
-                description: item ? `${item.code} - ${item.name}` : f.description,
-                unit: item?.unit || f.unit,
-              }))}
-              allowCreate={false}
-            />
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip linie</label>
+            <select
+              className="input"
+              value={form.lineType}
+              onChange={e => setForm(f => ({ ...f, lineType: e.target.value, itemId: null, operationId: null, description: '' }))}
+            >
+              <option value="material">Material</option>
+              <option value="component">Componenta</option>
+              <option value="service">Serviciu (subcontractare)</option>
+            </select>
+            {form.lineType === 'service' && (
+              <p className="text-[10px] text-amber-600 mt-1">Serviciu = operatie subcontractata la furnizor (ex: tratament termic, vopsire)</p>
+            )}
           </div>
+
+          {/* Item select for material/component, Operation select for service */}
+          {form.lineType !== 'service' ? (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                {form.lineType === 'component' ? 'Componenta din inventar' : 'Articol din inventar'} - cauta si selecteaza
+              </label>
+              <SearchableSelect
+                endpoint="/inventory/items"
+                labelField="name"
+                valueField="id"
+                placeholder="Cauta articol dupa cod sau denumire..."
+                value={form.itemId}
+                onChange={(id, item) => setForm(f => ({
+                  ...f,
+                  itemId: id,
+                  description: item ? `${item.code} - ${item.name}` : f.description,
+                  unit: item?.unit || f.unit,
+                }))}
+                allowCreate={false}
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Operatie BOM (pentru subcontractare)</label>
+              <select
+                className="input"
+                value={form.operationId || ''}
+                onChange={e => {
+                  const opId = e.target.value || null
+                  const op = operations.find(o => o.id === opId)
+                  setForm(f => ({
+                    ...f,
+                    operationId: opId,
+                    description: op ? `${op.product_reference || op.product_name} - ${op.name}` : f.description,
+                  }))
+                }}
+              >
+                <option value="">Selecteaza operatia...</option>
+                {operations.map(op => (
+                  <option key={op.id} value={op.id}>
+                    {op.product_reference || op.product_name} &mdash; {op.name} (#{op.sequence})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere - detalii suplimentare despre articol</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descriere - detalii suplimentare</label>
             <input className="input" placeholder="Descriere articol" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -154,8 +222,12 @@ function LineModal({ poId, editLine, onClose }) {
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
           <button
-            onClick={() => mutation.mutate({ ...form, quantity: Number(form.quantity), unitPrice: Number(form.unitPrice) })}
-            disabled={mutation.isPending || !form.quantity || !form.unitPrice}
+            onClick={() => mutation.mutate({
+              ...form,
+              quantity: Number(form.quantity),
+              unitPrice: Number(form.unitPrice),
+            })}
+            disabled={mutation.isPending || !form.quantity || !form.unitPrice || (form.lineType === 'service' && !form.operationId)}
             className="btn-primary"
           >
             {mutation.isPending ? 'Se salveaza...' : 'Salveaza'}
@@ -366,6 +438,7 @@ function PODetailModal({ poId, onClose }) {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
+                <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Tip</th>
                 <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Articol</th>
                 <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Cantitate</th>
                 <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Pret unitar</th>
@@ -381,8 +454,17 @@ function PODetailModal({ poId, onClose }) {
                 return (
                   <tr key={line.id} className="hover:bg-slate-50">
                     <td className="px-3 py-2">
-                      <span className="text-slate-800 text-xs">{line.item_name || line.item_code || line.description || '-'}</span>
-                      {line.description && line.item_name && <p className="text-[10px] text-slate-400 truncate">{line.description}</p>}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        line.line_type === 'service' ? 'bg-purple-100 text-purple-700' :
+                        line.line_type === 'component' ? 'bg-cyan-100 text-cyan-700' :
+                        'bg-slate-100 text-slate-600'
+                      }`}>
+                        {line.line_type === 'service' ? 'Serviciu' : line.line_type === 'component' ? 'Comp.' : 'Material'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="text-slate-800 text-xs">{line.line_type === 'service' ? (line.operation_name || line.description || '-') : (line.item_name || line.item_code || line.description || '-')}</span>
+                      {line.description && (line.item_name || line.operation_name) && <p className="text-[10px] text-slate-400 truncate">{line.description}</p>}
                     </td>
                     <td className="px-3 py-2 text-right text-xs">{Number(line.quantity).toLocaleString('ro-RO')} {line.unit}</td>
                     <td className="px-3 py-2 text-right text-xs">{Number(line.unit_price).toFixed(2)}</td>
@@ -407,7 +489,7 @@ function PODetailModal({ poId, onClose }) {
                 )
               })}
               {(!po.lines || po.lines.length === 0) && (
-                <tr><td colSpan={isDraft ? 6 : 5} className="px-3 py-6 text-center text-xs text-slate-400">Nicio linie.</td></tr>
+                <tr><td colSpan={isDraft ? 7 : 6} className="px-3 py-6 text-center text-xs text-slate-400">Nicio linie.</td></tr>
               )}
             </tbody>
           </table>

@@ -21,7 +21,7 @@ export async function calculateOrderCost(orderId) {
   const LABOR_HOURLY_RATE_DEFAULT = costDefaults.defaultLaborHourlyRate || 15;
 
   // ── PLANNED COST (from BOM) ──────────────────────────────────────────────
-  let plannedMaterialCost = 0;
+  let plannedMaterialCost = 0;  // may be reduced by scrap recovery below
   let plannedLaborCost = 0;
   let plannedMachineCost = 0;
 
@@ -54,6 +54,23 @@ export async function calculateOrderCost(orderId) {
       plannedLaborCost += hours * (laborRate ? Number(laborRate.rate_eur) : LABOR_HOURLY_RATE_DEFAULT);
     }
   }
+
+  // ── SCRAP VALUE RECOVERY (subtract recovered scrap value from material cost) ──
+  let scrapValueRecovery = 0;
+  if (bomProduct) {
+    const opsWithScrap = await db('bom.operations').where('product_id', bomProduct.id).whereNotNull('scrap_percent');
+    const mats = await db('bom.materials').where('product_id', bomProduct.id);
+    const totalMaterialWeightPerPiece = mats.reduce((s, m) => s + Number(m.qty_per_piece || 0) * Number(m.waste_factor || 1), 0);
+    for (const op of opsWithScrap) {
+      const scrapPct = Number(op.scrap_percent) || 0;
+      const scrapValPerKg = Number(op.scrap_value_per_kg) || 0;
+      if (scrapPct > 0 && scrapValPerKg > 0 && op.scrap_type === 'sellable') {
+        const scrapWeightPerPiece = totalMaterialWeightPerPiece * scrapPct / 100;
+        scrapValueRecovery += scrapWeightPerPiece * scrapValPerKg * order.target_quantity;
+      }
+    }
+  }
+  plannedMaterialCost = Math.max(0, plannedMaterialCost - scrapValueRecovery);
 
   const plannedTotal = plannedMaterialCost + plannedLaborCost + plannedMachineCost;
 

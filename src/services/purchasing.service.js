@@ -1,5 +1,11 @@
 import db from '../config/db.js';
 
+// ── Schema ensure (add line_type + operation_id if missing) ─────────────────
+const _ensureSchema = db.raw(`
+  ALTER TABLE purchasing.purchase_order_lines ADD COLUMN IF NOT EXISTS line_type VARCHAR(20) DEFAULT 'material';
+  ALTER TABLE purchasing.purchase_order_lines ADD COLUMN IF NOT EXISTS operation_id UUID;
+`).catch(() => {/* columns may already exist */});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function err(msg, code = 400) {
@@ -91,8 +97,9 @@ export async function getPO(id) {
 
   const lines = await db('purchasing.purchase_order_lines as l')
     .leftJoin('inventory.items as i', 'l.item_id', 'i.id')
+    .leftJoin('bom.operations as op', 'l.operation_id', 'op.id')
     .where('l.po_id', id)
-    .select('l.*', 'i.code as item_code', 'i.name as item_name');
+    .select('l.*', 'i.code as item_code', 'i.name as item_name', 'op.name as operation_name');
 
   const receipts = await db('purchasing.po_receipts')
     .where({ po_id: id })
@@ -126,6 +133,18 @@ export async function addLine(poId, lineData) {
   if (!po) err('Comanda negasita.', 404);
   if (!['draft', 'confirmed'].includes(po.status)) err('Linii pot fi adaugate doar in comenzi draft sau confirmate.');
 
+  // Validate line_type
+  const lineType = lineData.lineType || lineData.line_type || 'material';
+  if (!['material', 'component', 'service'].includes(lineType)) {
+    err('Tip linie invalid. Valori acceptate: material, component, service.');
+  }
+
+  // For service type, operation_id is expected
+  const operationId = lineData.operationId || lineData.operation_id || null;
+  if (lineType === 'service' && !operationId) {
+    err('Pentru tip "service" (subcontractare), operatia este obligatorie.');
+  }
+
   const [line] = await db('purchasing.purchase_order_lines').insert({
     po_id: poId,
     item_id: lineData.itemId || null,
@@ -134,6 +153,8 @@ export async function addLine(poId, lineData) {
     unit: lineData.unit || 'buc',
     unit_price: lineData.unitPrice,
     notes: lineData.notes || null,
+    line_type: lineType,
+    operation_id: operationId,
   }).returning('*');
 
   // Recalculate total
@@ -155,6 +176,8 @@ export async function updateLine(lineId, data) {
   if (data.unit !== undefined) updates.unit = data.unit;
   if (data.unitPrice !== undefined) updates.unit_price = data.unitPrice;
   if (data.notes !== undefined) updates.notes = data.notes;
+  if (data.lineType !== undefined || data.line_type !== undefined) updates.line_type = data.lineType || data.line_type;
+  if (data.operationId !== undefined || data.operation_id !== undefined) updates.operation_id = data.operationId || data.operation_id;
 
   const [updated] = await db('purchasing.purchase_order_lines').where({ id: lineId }).update(updates).returning('*');
 

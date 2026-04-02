@@ -476,6 +476,14 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
     reject_action: operation.reject_action || 'scrap',
     transfer_type: operation.transfer_type || '',
     description: operation.description || '',
+    operation_mode: operation.operation_mode || '',
+    required_operators: operation.required_operators || 1,
+    operator_involvement: operation.operator_involvement || '',
+    operator_involvement_percent: operation.operator_involvement_percent || '',
+    required_skills: parseJsonArray(operation.required_skills),
+    scrap_percent: operation.scrap_percent || '',
+    scrap_type: operation.scrap_type || '',
+    scrap_value_per_kg: operation.scrap_value_per_kg || '',
   })
 
   // BOM material linking state
@@ -532,6 +540,22 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
     onError: (err) => toast.error(err.response?.data?.message || 'Eroare la salvare.'),
   })
 
+  // Skills management
+  const [showSkillForm, setShowSkillForm] = useState(false)
+  const [skillForm, setSkillForm] = useState({ machine_type: '', controller_type: '', min_level: 'operator' })
+
+  function addSkill() {
+    if (!skillForm.machine_type) return
+    const label = `${skillForm.machine_type}${skillForm.controller_type ? ' ' + skillForm.controller_type : ''} nivel ${skillForm.min_level}`
+    setForm(prev => ({ ...prev, required_skills: [...prev.required_skills, { ...skillForm, label }] }))
+    setSkillForm({ machine_type: '', controller_type: '', min_level: 'operator' })
+    setShowSkillForm(false)
+  }
+
+  function removeSkill(idx) {
+    setForm(prev => ({ ...prev, required_skills: prev.required_skills.filter((_, i) => i !== idx) }))
+  }
+
   function handleSave() {
     saveMut.mutate({
       ...form,
@@ -541,6 +565,10 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
       sequence: form.sequence ? Number(form.sequence) : null,
       min_batch_before_next: form.min_batch_before_next ? Number(form.min_batch_before_next) : null,
       transport_time_minutes: form.transport_time_minutes ? Number(form.transport_time_minutes) : null,
+      required_operators: form.required_operators ? Number(form.required_operators) : 1,
+      operator_involvement_percent: form.operator_involvement_percent ? Number(form.operator_involvement_percent) : null,
+      scrap_percent: form.scrap_percent !== '' ? Number(form.scrap_percent) : null,
+      scrap_value_per_kg: form.scrap_value_per_kg !== '' ? Number(form.scrap_value_per_kg) : null,
     })
   }
 
@@ -631,6 +659,117 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
             <label className="text-xs text-slate-500 mb-1 block">Numar cavitati / piese per ciclu</label>
             <input className="input text-sm w-32" type="number" min="1" value={form.nr_cavities} onChange={f('nr_cavities')} />
             <p className="text-[10px] text-slate-400 mt-1">Cate piese se produc intr-un singur ciclu (ex: matrita cu 4 cavitati = 4 piese/ciclu)</p>
+          </div>
+
+          {/* ── Operator Requirements ──────────────────────────────────── */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-3">
+            <label className="text-xs font-semibold text-indigo-700 block">Operatori & Mod operatie</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Mod operatie</label>
+                <select className="input text-sm" value={form.operation_mode} onChange={f('operation_mode')}>
+                  <option value="">Selecteaza</option>
+                  <option value="machine">Pe masina</option>
+                  <option value="workstation">Post de lucru</option>
+                  <option value="space">Spatiu/Zona</option>
+                  <option value="waiting">Timp asteptare</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {form.operation_mode === 'machine' && 'Necesita masina dedicata'}
+                  {form.operation_mode === 'workstation' && 'Masa asamblare, zona control'}
+                  {form.operation_mode === 'space' && 'Zona uscare/racire (capacitate limitata)'}
+                  {form.operation_mode === 'waiting' && 'Fara resursa, doar durata (ex: uscare)'}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Nr operatori necesari</label>
+                <input className="input text-sm" type="number" min="0" value={form.required_operators} onChange={f('required_operators')} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Tip implicare operator</label>
+                <select className="input text-sm" value={form.operator_involvement} onChange={f('operator_involvement')}>
+                  <option value="">Selecteaza</option>
+                  <option value="active">Activa (100% dedicat)</option>
+                  <option value="supervision">Supraveghere (procentaj)</option>
+                  <option value="none">Fara operator (automat)</option>
+                </select>
+              </div>
+              {form.operator_involvement === 'supervision' && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Procent implicare (%)</label>
+                  <input className="input text-sm" type="number" min="0" max="100" value={form.operator_involvement_percent} onChange={f('operator_involvement_percent')} />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Cat % din timp operatorul e activ pe aceasta operatie</p>
+                </div>
+              )}
+            </div>
+
+            {/* Required Skills */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Competente necesare</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {form.required_skills.map((skill, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs">
+                    {skill.label || `${skill.machine_type} ${skill.controller_type || ''} nivel ${skill.min_level}`}
+                    <button onClick={() => removeSkill(idx)} className="text-indigo-400 hover:text-red-500"><X size={10} /></button>
+                  </span>
+                ))}
+                {form.required_skills.length === 0 && <span className="text-xs text-slate-400 italic">Nicio competenta definita</span>}
+              </div>
+              {showSkillForm ? (
+                <div className="flex items-end gap-2 bg-white rounded-lg p-2 border border-indigo-200">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-500 block">Tip masina</label>
+                    <input className="input text-sm" placeholder="ex: CNC Fanuc" value={skillForm.machine_type} onChange={e => setSkillForm(p => ({...p, machine_type: e.target.value}))} />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-500 block">Controller</label>
+                    <input className="input text-sm" placeholder="ex: Siemens" value={skillForm.controller_type} onChange={e => setSkillForm(p => ({...p, controller_type: e.target.value}))} />
+                  </div>
+                  <div className="w-28">
+                    <label className="text-[10px] text-slate-500 block">Nivel minim</label>
+                    <select className="input text-sm" value={skillForm.min_level} onChange={e => setSkillForm(p => ({...p, min_level: e.target.value}))}>
+                      <option value="operator">Operator</option>
+                      <option value="senior">Senior</option>
+                      <option value="expert">Expert</option>
+                    </select>
+                  </div>
+                  <button onClick={addSkill} className="btn-primary text-xs whitespace-nowrap py-2">Adauga</button>
+                  <button onClick={() => setShowSkillForm(false)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+                </div>
+              ) : (
+                <button onClick={() => setShowSkillForm(true)} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-1"><Plus size={12} /> Adauga competenta</button>
+              )}
+            </div>
+          </div>
+
+          {/* ── Scrap / Reziduu ──────────────────────────────────────── */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
+            <label className="text-xs font-semibold text-amber-700 block">Scrap / Reziduu</label>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Procent scrap estimat (%)</label>
+                <input className="input text-sm" type="number" min="0" max="100" step="0.1" value={form.scrap_percent} onChange={f('scrap_percent')} />
+                <p className="text-[10px] text-slate-400 mt-0.5">Procentul de material pierdut in aceasta operatie</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Tip scrap</label>
+                <select className="input text-sm" value={form.scrap_type} onChange={f('scrap_type')}>
+                  <option value="">Selecteaza</option>
+                  <option value="recyclable_internal">Reciclabil intern</option>
+                  <option value="sellable">Vandabil</option>
+                  <option value="waste">Deseu</option>
+                </select>
+              </div>
+              {form.scrap_type === 'sellable' && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Valoare scrap (RON/kg)</label>
+                  <input className="input text-sm" type="number" min="0" step="0.01" value={form.scrap_value_per_kg} onChange={f('scrap_value_per_kg')} />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Pretul la care se vinde scrapul (ex: span otel = 0.30 RON/kg)</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Material from inventory + BOM linking */}

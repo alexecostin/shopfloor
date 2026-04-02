@@ -111,6 +111,14 @@ export async function createOperation(productId, data) {
     time_unit: data.timeUnit || data.time_unit || 'seconds',
     input_material_id: data.inputMaterialId || data.input_material_id || null,
     drawing_url: data.drawingUrl || data.drawing_url || null,
+    operation_mode: data.operationMode || data.operation_mode || null,
+    required_operators: data.requiredOperators || data.required_operators || 1,
+    operator_involvement: data.operatorInvolvement || data.operator_involvement || null,
+    operator_involvement_percent: data.operatorInvolvementPercent || data.operator_involvement_percent || null,
+    required_skills: JSON.stringify(data.requiredSkills || data.required_skills || []),
+    scrap_percent: data.scrapPercent || data.scrap_percent || null,
+    scrap_type: data.scrapType || data.scrap_type || null,
+    scrap_value_per_kg: data.scrapValuePerKg || data.scrap_value_per_kg || null,
   };
   const [op] = await db('bom.operations').insert(row).returning('*');
   return op;
@@ -125,8 +133,11 @@ export async function updateOperation(id, data) {
     'consumables','attention_points','min_batch_before_next','nr_cavities',
     'pieces_per_hour','transfer_type','is_active',
     'transport_time_minutes','deposit_location','reject_action','time_unit',
-    'input_material_id','drawing_url'];
-  const jsonFields = ['tools_config','machine_parameters','consumables','attention_points'];
+    'input_material_id','drawing_url',
+    'operation_mode','required_operators','operator_involvement',
+    'operator_involvement_percent','required_skills',
+    'scrap_percent','scrap_type','scrap_value_per_kg'];
+  const jsonFields = ['tools_config','machine_parameters','consumables','attention_points','required_skills'];
 
   for (const f of snakeFields) {
     if (data[f] !== undefined) {
@@ -146,6 +157,10 @@ export async function updateOperation(id, data) {
     transportTimeMinutes: 'transport_time_minutes', depositLocation: 'deposit_location',
     rejectAction: 'reject_action', timeUnit: 'time_unit',
     inputMaterialId: 'input_material_id', drawingUrl: 'drawing_url',
+    operationMode: 'operation_mode', requiredOperators: 'required_operators',
+    operatorInvolvement: 'operator_involvement', operatorInvolvementPercent: 'operator_involvement_percent',
+    requiredSkills: 'required_skills',
+    scrapPercent: 'scrap_percent', scrapType: 'scrap_type', scrapValuePerKg: 'scrap_value_per_kg',
   };
   for (const [camel, snake] of Object.entries(camelMap)) {
     if (data[camel] !== undefined) {
