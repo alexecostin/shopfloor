@@ -634,18 +634,17 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
   )
 }
 
-// --------------- Tab 3: Simulari ---------------
+// --------------- Tab 3: Simulari (Redesigned Wizard) ---------------
+const SCENARIO_TYPES = [
+  { value: 'machine_down', label: 'Masina indisponibila' },
+  { value: 'urgent_order', label: 'Comanda urgenta noua' },
+  { value: 'constraint_change', label: 'Schimbare constrangeri' },
+  { value: 'custom', label: 'Custom' },
+]
+
 function SimulationsTab() {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
-  const [simForm, setSimForm] = useState({
-    name: '', description: '',
-    disabled_machines: [],
-    urgent_orders: [],
-    allow_overtime: false,
-    period_from: '',
-    period_to: '',
-  })
   const [selectedSim, setSelectedSim] = useState(null)
 
   const { data: simulations = [], isLoading } = useQuery({
@@ -653,60 +652,26 @@ function SimulationsTab() {
     queryFn: () => api.get('/scheduling/simulations').then(r => r.data),
   })
 
-  const { data: machinesData } = useQuery({
-    queryKey: ['scheduling-machines-list'],
-    queryFn: () => api.get('/machines', { params: { limit: 500 } }).then(r => {
-      const d = r.data
-      return Array.isArray(d) ? d : (d?.data || [])
-    }),
-  })
-
-  const { data: woData } = useQuery({
-    queryKey: ['scheduling-work-orders'],
-    queryFn: () => api.get('/work-orders', { params: { limit: 200 } }).then(r => {
-      const d = r.data
-      return Array.isArray(d) ? d : (d?.data || [])
-    }),
-  })
-
-  const machinesList = machinesData || []
-  const workOrdersList = woData || []
-
-  const createMut = useMutation({
-    mutationFn: data => api.post('/scheduling/simulations', data),
-    onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); setShowCreate(false); setSimForm({ name: '', description: '', disabled_machines: [], urgent_orders: [], allow_overtime: false, period_from: '', period_to: '' }); toast.success('Simulare creata.') },
-    onError: (e) => {
-      const msg = e.response?.data?.message || '';
-      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
-      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
-      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
-    },
-  })
-
   const deleteMut = useMutation({
     mutationFn: id => api.delete(`/scheduling/simulations/${id}`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); setSelectedSim(null); toast.success('Simulare stearsa.') },
-    onError: (e) => {
-      const msg = e.response?.data?.message || '';
-      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
-      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
-      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
-    },
+    onError: (e) => { toast.error(e.response?.data?.message || 'A aparut o eroare. Incercati din nou.') },
   })
 
   const applyMut = useMutation({
     mutationFn: id => api.post(`/scheduling/simulations/${id}/apply`),
     onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); toast.success('Simulare aplicata cu succes!') },
-    onError: (e) => {
-      const msg = e.response?.data?.message || '';
-      if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
-      else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
-      else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
-    },
+    onError: (e) => { toast.error(e.response?.data?.message || 'A aparut o eroare. Incercati din nou.') },
   })
+
+  const statusColor = {
+    completed: 'bg-green-100 text-green-700',
+    running: 'bg-blue-100 text-blue-700',
+    failed: 'bg-red-100 text-red-700',
+    applied: 'bg-purple-100 text-purple-700',
+    pending: 'bg-yellow-100 text-yellow-700',
+    draft: 'bg-slate-100 text-slate-600',
+  }
 
   return (
     <div className="space-y-4">
@@ -720,7 +685,12 @@ function SimulationsTab() {
           <div key={sim.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4 cursor-pointer hover:border-blue-300 transition-colors" onClick={() => setSelectedSim(sim)}>
             <FlaskConical size={18} className="text-purple-400 shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-slate-800">{sim.name}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-800">{sim.name}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor[sim.status] || 'bg-slate-100 text-slate-600'}`}>
+                  {sim.status || 'draft'}
+                </span>
+              </div>
               <div className="text-sm text-slate-500 truncate">{sim.description || 'Fara descriere'}</div>
               <div className="text-xs text-slate-400 mt-1">{sim.created_at ? new Date(sim.created_at).toLocaleString('ro-RO') : ''}</div>
             </div>
@@ -731,236 +701,526 @@ function SimulationsTab() {
           </div>
         ))}
         {!isLoading && simulations.length === 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">Nicio simulare. Creeaza una pentru a testa scenarii.</div>
+          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">Nicio simulare. Creeaza una pentru a testa scenarii what-if.</div>
         )}
       </div>
 
-      {/* Create simulation modal */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-slate-800 mb-4">Simulare noua</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Nume *</label>
-                <input className="input" value={simForm.name} onChange={e => setSimForm({ ...simForm, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Descriere</label>
-                <textarea className="input" rows={2} value={simForm.description} onChange={e => setSimForm({ ...simForm, description: e.target.value })} />
-              </div>
-
-              {/* Masini dezactivate */}
-              <div>
-                <label className="text-xs text-slate-500 mb-2 block">Masini dezactivate</label>
-                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
-                  {machinesList.map(m => (
-                    <label key={m.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-slate-50 px-1 rounded">
-                      <input
-                        type="checkbox"
-                        checked={simForm.disabled_machines.includes(m.id)}
-                        onChange={e => {
-                          const checked = e.target.checked
-                          setSimForm(f => ({
-                            ...f,
-                            disabled_machines: checked
-                              ? [...f.disabled_machines, m.id]
-                              : f.disabled_machines.filter(id => id !== m.id)
-                          }))
-                        }}
-                        className="rounded border-slate-300 text-blue-600"
-                      />
-                      <span className="text-slate-700">{m.code} - {m.name}</span>
-                    </label>
-                  ))}
-                  {machinesList.length === 0 && <p className="text-xs text-slate-400">Nicio masina disponibila.</p>}
-                </div>
-              </div>
-
-              {/* Comenzi urgente */}
-              <div>
-                <label className="text-xs text-slate-500 mb-2 block">Comenzi urgente</label>
-                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
-                  {workOrdersList.map(wo => (
-                    <label key={wo.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-slate-50 px-1 rounded">
-                      <input
-                        type="checkbox"
-                        checked={simForm.urgent_orders.includes(wo.id)}
-                        onChange={e => {
-                          const checked = e.target.checked
-                          setSimForm(f => ({
-                            ...f,
-                            urgent_orders: checked
-                              ? [...f.urgent_orders, wo.id]
-                              : f.urgent_orders.filter(id => id !== wo.id)
-                          }))
-                        }}
-                        className="rounded border-slate-300 text-blue-600"
-                      />
-                      <span className="text-slate-700">{wo.work_order_number} - {wo.product_name || wo.product_reference || ''}</span>
-                    </label>
-                  ))}
-                  {workOrdersList.length === 0 && <p className="text-xs text-slate-400">Nicio comanda disponibila.</p>}
-                </div>
-              </div>
-
-              {/* Overtime */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={simForm.allow_overtime}
-                  onChange={e => setSimForm({ ...simForm, allow_overtime: e.target.checked })}
-                  className="rounded border-slate-300 text-blue-600"
-                />
-                <span className="text-sm text-slate-700">Overtime permis</span>
-              </label>
-
-              {/* Perioada */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Perioada de la *</label>
-                  <input type="date" className="input" value={simForm.period_from} onChange={e => setSimForm({ ...simForm, period_from: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Perioada pana la *</label>
-                  <input type="date" className="input" value={simForm.period_to} onChange={e => setSimForm({ ...simForm, period_to: e.target.value })} />
-                </div>
-              </div>
-              {(!simForm.period_from || !simForm.period_to) && (
-                <p className="text-xs text-amber-600">Perioada este obligatorie pentru simulare.</p>
-              )}
-            </div>
-            <div className="flex gap-2 mt-5 justify-end">
-              <button onClick={() => setShowCreate(false)} className="btn-secondary">Anuleaza</button>
-              <button onClick={() => {
-                if (!simForm.period_from || !simForm.period_to) {
-                  toast.error('Perioada (de la / pana la) este obligatorie.')
-                  return
-                }
-                const payload = {
-                  name: simForm.name,
-                  description: simForm.description,
-                  periodStart: simForm.period_from,
-                  periodEnd: simForm.period_to,
-                  constraintsModified: {
-                    disabled_machines: simForm.disabled_machines,
-                    urgent_orders: simForm.urgent_orders,
-                    allow_overtime: simForm.allow_overtime,
-                  },
-                }
-                createMut.mutate(payload)
-              }} disabled={!simForm.name || !simForm.period_from || !simForm.period_to || createMut.isPending} className="btn-primary">
-                {createMut.isPending ? 'Se creeaza...' : 'Creeaza'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Simulation detail modal */}
+      {showCreate && <SimulationWizard onClose={() => { setShowCreate(false); qc.invalidateQueries(['scheduling-simulations']) }} />}
       {selectedSim && <SimulationDetailModal sim={selectedSim} onClose={() => setSelectedSim(null)} onApply={id => applyMut.mutate(id)} onDelete={id => deleteMut.mutate(id)} applyPending={applyMut.isPending} />}
     </div>
   )
 }
 
-const PARAM_LABELS = {
-  disabled_machines: 'Masini dezactivate',
-  urgent_orders: 'Comenzi urgente',
-  allow_overtime: 'Overtime permis',
-  period_from: 'Perioada de la',
-  period_to: 'Perioada pana la',
-  capacity_factor: 'Factor capacitate',
-  priority: 'Prioritate',
-}
+// --------------- Simulation Wizard (3-step) ---------------
+function SimulationWizard({ onClose }) {
+  const qc = useQueryClient()
+  const [step, setStep] = useState(1)
+  const [form, setForm] = useState({
+    name: '', description: '', scenarioType: 'machine_down',
+    disabledMachines: [],
+    urgentProduct: '', urgentQuantity: '', urgentDeadline: '',
+    shifts: 2, allowOvertime: false, allowWeekend: false,
+    customDescription: '',
+    periodStart: new Date().toISOString().split('T')[0],
+    periodEnd: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+  })
+  const [simResult, setSimResult] = useState(null)
+  const [createdSimId, setCreatedSimId] = useState(null)
 
-function formatParamValue(key, val) {
-  if (val === true) return 'Da'
-  if (val === false) return 'Nu'
-  if (Array.isArray(val)) return val.length > 0 ? val.join(', ') : 'Niciunul'
-  if (val === null || val === undefined || val === '') return '-'
-  if (typeof val === 'object') {
-    // Render object properties as readable lines
-    const entries = Object.entries(val)
-    if (entries.length === 0) return '-'
-    return entries.map(([k, v]) => `${PARAM_LABELS[k] || k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(', ')
+  const { data: machinesData } = useQuery({
+    queryKey: ['scheduling-machines-list'],
+    queryFn: () => api.get('/machines', { params: { limit: 500 } }).then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.data || [])
+    }),
+  })
+
+  const { data: productsData } = useQuery({
+    queryKey: ['sim-products-list'],
+    queryFn: () => api.get('/bom/products', { params: { limit: 500 } }).then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.data || [])
+    }),
+    enabled: form.scenarioType === 'urgent_order',
+  })
+
+  const machinesList = machinesData || []
+  const productsList = productsData || []
+
+  const createAndRunMut = useMutation({
+    mutationFn: data => api.post('/scheduling/simulations', data),
+    onSuccess: (res) => {
+      const sim = res.data
+      const simId = sim?.id || sim?.data?.id
+      setCreatedSimId(simId)
+      if (simId) {
+        fetchSimResult(simId)
+      } else {
+        setSimResult({ detail: sim, compare: null })
+      }
+      qc.invalidateQueries(['scheduling-simulations'])
+    },
+    onError: (e) => {
+      toast.error(e.response?.data?.message || 'Eroare la crearea simularii.')
+    },
+  })
+
+  const applyMut = useMutation({
+    mutationFn: id => api.post(`/scheduling/simulations/${id}/apply`),
+    onSuccess: () => { qc.invalidateQueries(['scheduling-simulations']); toast.success('Plan simulat aplicat cu succes!'); onClose() },
+    onError: (e) => { toast.error(e.response?.data?.message || 'Eroare la aplicare.') },
+  })
+
+  async function fetchSimResult(simId) {
+    try {
+      const [detailRes, compareRes] = await Promise.allSettled([
+        api.get(`/scheduling/simulations/${simId}`),
+        api.get(`/scheduling/simulations/${simId}/compare`),
+      ])
+      const detail = detailRes.status === 'fulfilled' ? detailRes.value.data : null
+      const compare = compareRes.status === 'fulfilled' ? compareRes.value.data : null
+      setSimResult({ detail, compare })
+    } catch {
+      setSimResult({ detail: null, compare: null })
+    }
   }
-  return String(val)
+
+  function buildPayload() {
+    const constraintsModified = {}
+    if (form.scenarioType === 'machine_down') {
+      constraintsModified.disabled_machines = form.disabledMachines
+    } else if (form.scenarioType === 'urgent_order') {
+      constraintsModified.urgent_order = {
+        product: form.urgentProduct,
+        quantity: Number(form.urgentQuantity) || 0,
+        deadline: form.urgentDeadline,
+      }
+    } else if (form.scenarioType === 'constraint_change') {
+      constraintsModified.shifts = form.shifts
+      constraintsModified.allow_overtime = form.allowOvertime
+      constraintsModified.allow_weekend = form.allowWeekend
+    } else {
+      constraintsModified.custom = form.customDescription
+    }
+    return {
+      name: form.name,
+      description: form.description,
+      periodStart: form.periodStart,
+      periodEnd: form.periodEnd,
+      constraintsModified,
+    }
+  }
+
+  function handleRun() {
+    if (!form.periodStart || !form.periodEnd) { toast.error('Perioada este obligatorie.'); return }
+    if (!form.name) { toast.error('Numele simularii este obligatoriu.'); return }
+    createAndRunMut.mutate(buildPayload())
+  }
+
+  const canGoStep2 = form.name && form.scenarioType
+  const canRunSim = form.periodStart && form.periodEnd
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
+        {/* Header with steps */}
+        <div className="p-6 border-b">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-800">Simulare noua</h3>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+          </div>
+          <div className="flex gap-2">
+            {[
+              { n: 1, label: 'Definire scenariu' },
+              { n: 2, label: 'Configurare' },
+              { n: 3, label: 'Rezultat' },
+            ].map(s => (
+              <div key={s.n} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === s.n ? 'bg-blue-100 text-blue-700' : step > s.n ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step === s.n ? 'bg-blue-600 text-white' : step > s.n ? 'bg-green-500 text-white' : 'bg-slate-300 text-white'}`}>{step > s.n ? '\u2713' : s.n}</span>
+                {s.label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 overflow-auto flex-1">
+          {/* Step 1: Definire scenariu */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Nume simulare *</label>
+                <input className="input" placeholder="Ex: Test masina CNC oprita" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Descriere</label>
+                <textarea className="input" rows={2} placeholder="Ce doriti sa aflati din aceasta simulare?" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Tip scenariu *</label>
+                <select className="input" value={form.scenarioType} onChange={e => setForm({ ...form, scenarioType: e.target.value })}>
+                  {SCENARIO_TYPES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {form.scenarioType === 'machine_down' && 'Ce se intampla daca una sau mai multe masini se strica?'}
+                  {form.scenarioType === 'urgent_order' && 'Ce se intampla daca vine o comanda urgenta?'}
+                  {form.scenarioType === 'constraint_change' && 'Ce se intampla daca modificam turele sau permitem overtime/weekend?'}
+                  {form.scenarioType === 'custom' && 'Scenariu personalizat cu descriere libera.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Configurare */}
+          {step === 2 && (
+            <div className="space-y-4">
+              {form.scenarioType === 'machine_down' && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-2 block">Selecteaza masinile indisponibile</label>
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
+                    {machinesList.map(m => (
+                      <label key={m.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-slate-50 px-2 py-1 rounded">
+                        <input type="checkbox" checked={form.disabledMachines.includes(m.id)}
+                          onChange={e => {
+                            const checked = e.target.checked
+                            setForm(f => ({ ...f, disabledMachines: checked ? [...f.disabledMachines, m.id] : f.disabledMachines.filter(id => id !== m.id) }))
+                          }}
+                          className="rounded border-slate-300 text-red-600" />
+                        <span className="text-slate-700">{m.code ? `${m.code} - ` : ''}{m.name}</span>
+                      </label>
+                    ))}
+                    {machinesList.length === 0 && <p className="text-xs text-slate-400 py-2">Nicio masina disponibila.</p>}
+                  </div>
+                  {form.disabledMachines.length > 0 && (
+                    <p className="text-xs text-red-600 mt-1">{form.disabledMachines.length} masina(i) selectata(e) ca indisponibila(e)</p>
+                  )}
+                </div>
+              )}
+
+              {form.scenarioType === 'urgent_order' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Produs *</label>
+                    <select className="input" value={form.urgentProduct} onChange={e => setForm({ ...form, urgentProduct: e.target.value })}>
+                      <option value="">Selecteaza produs...</option>
+                      {productsList.map(p => <option key={p.id} value={p.code || p.name}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Cantitate *</label>
+                    <input type="number" className="input" min="1" placeholder="Ex: 500" value={form.urgentQuantity} onChange={e => setForm({ ...form, urgentQuantity: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Deadline *</label>
+                    <input type="date" className="input" value={form.urgentDeadline} onChange={e => setForm({ ...form, urgentDeadline: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
+              {form.scenarioType === 'constraint_change' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Numar schimburi / zi</label>
+                    <select className="input w-40" value={form.shifts} onChange={e => setForm({ ...form, shifts: Number(e.target.value) })}>
+                      <option value={1}>1 schimb</option>
+                      <option value={2}>2 schimburi</option>
+                      <option value={3}>3 schimburi</option>
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.allowOvertime} onChange={e => setForm({ ...form, allowOvertime: e.target.checked })} className="rounded border-slate-300 text-blue-600" />
+                    <span className="text-sm text-slate-700">Permite overtime</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.allowWeekend} onChange={e => setForm({ ...form, allowWeekend: e.target.checked })} className="rounded border-slate-300 text-blue-600" />
+                    <span className="text-sm text-slate-700">Permite lucru in weekend</span>
+                  </label>
+                </div>
+              )}
+
+              {form.scenarioType === 'custom' && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Descriere scenariu custom</label>
+                  <textarea className="input" rows={4} placeholder="Descrieti scenariul in detaliu..." value={form.customDescription} onChange={e => setForm({ ...form, customDescription: e.target.value })} />
+                </div>
+              )}
+
+              <div className="border-t border-slate-200 pt-4 mt-4">
+                <label className="text-xs text-slate-500 font-medium mb-2 block">Perioada simulare *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Data start</label>
+                    <input type="date" className="input" value={form.periodStart} onChange={e => setForm({ ...form, periodStart: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Data sfarsit</label>
+                    <input type="date" className="input" value={form.periodEnd} onChange={e => setForm({ ...form, periodEnd: e.target.value })} />
+                  </div>
+                </div>
+                {(!form.periodStart || !form.periodEnd) && (
+                  <p className="text-xs text-amber-600 mt-1">Perioada este obligatorie.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Rezultat */}
+          {step === 3 && (
+            <div className="space-y-4">
+              {createAndRunMut.isPending && (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4" />
+                  <p className="text-slate-600 font-medium">Se ruleaza simularea...</p>
+                  <p className="text-xs text-slate-400 mt-1">Se calculeaza impactul asupra planificarii</p>
+                </div>
+              )}
+
+              {createAndRunMut.isError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                  <p className="text-red-700 font-medium">Eroare la rularea simularii</p>
+                  <p className="text-xs text-red-500 mt-1">{createAndRunMut.error?.response?.data?.message || 'Incercati din nou.'}</p>
+                  <button onClick={handleRun} className="btn-secondary mt-3 text-sm">Reincearca</button>
+                </div>
+              )}
+
+              {simResult && !createAndRunMut.isPending && (
+                <SimulationResultView result={simResult} />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-2 p-6 border-t justify-between">
+          <button onClick={onClose} className="btn-secondary">Anuleaza</button>
+          <div className="flex gap-2">
+            {step > 1 && step < 3 && (
+              <button onClick={() => setStep(s => s - 1)} className="btn-secondary">Inapoi</button>
+            )}
+            {step === 1 && (
+              <button onClick={() => setStep(2)} disabled={!canGoStep2} className="btn-primary">Urmatorul pas</button>
+            )}
+            {step === 2 && (
+              <button onClick={() => { setStep(3); handleRun() }} disabled={!canRunSim || createAndRunMut.isPending} className="btn-primary flex items-center gap-2">
+                <Zap size={14} /> Ruleaza simulare
+              </button>
+            )}
+            {step === 3 && simResult && createdSimId && !createAndRunMut.isPending && (
+              <button onClick={() => applyMut.mutate(createdSimId)} disabled={applyMut.isPending} className="btn-primary flex items-center gap-2">
+                <CheckCircle size={14} /> {applyMut.isPending ? 'Se aplica...' : 'Aplica planul simulat'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
+// --------------- Simulation Result View ---------------
+function SimulationResultView({ result }) {
+  const { detail, compare } = result || {}
+  const orders = compare?.orders || compare?.impacted_orders || compare?.data?.orders || []
+  const machineLoad = compare?.machine_load || compare?.machineLoad || compare?.data?.machine_load || []
+  const summary = compare?.summary || compare?.data?.summary || null
+
+  const delayedCount = orders.filter(o => (o.delay_days || o.delayDays || 0) > 0).length
+  const avgLoad = machineLoad.length > 0 ? Math.round(machineLoad.reduce((s, m) => s + (m.load_after || m.load_simulation || m.load || 0), 0) / machineLoad.length) : null
+  const avgLoadBefore = machineLoad.length > 0 ? Math.round(machineLoad.reduce((s, m) => s + (m.load_before || m.load_base || m.load_current || 0), 0) / machineLoad.length) : null
+
+  const hasCompareData = orders.length > 0 || machineLoad.length > 0 || summary
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+          <p className="text-xs text-blue-500 mb-1">Comenzi analizate</p>
+          <p className="text-xl font-bold text-blue-700">{orders.length || (detail?.total_orders ?? '-')}</p>
+        </div>
+        <div className={`${delayedCount > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'} border rounded-xl p-4 text-center`}>
+          <p className={`text-xs ${delayedCount > 0 ? 'text-red-500' : 'text-green-500'} mb-1`}>Comenzi intarziate</p>
+          <p className={`text-xl font-bold ${delayedCount > 0 ? 'text-red-700' : 'text-green-700'}`}>{delayedCount}</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+          <p className="text-xs text-purple-500 mb-1">Incarcare medie</p>
+          <p className="text-xl font-bold text-purple-700">{avgLoad != null ? `${avgLoad}%` : '-'}</p>
+          {avgLoadBefore != null && avgLoad != null && (
+            <p className="text-[10px] text-slate-400">{avgLoadBefore}% {'\u2192'} {avgLoad}%</p>
+          )}
+        </div>
+      </div>
+
+      {summary && typeof summary === 'string' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">{summary}</div>
+      )}
+      {summary && typeof summary === 'object' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+          {summary.message || summary.text || Object.entries(summary).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+        </div>
+      )}
+
+      {!hasCompareData && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
+          Simulare fara date de comparatie. Serverul nu a returnat date de impact.
+        </div>
+      )}
+
+      {/* Impact comenzi table */}
+      {orders.length > 0 && (
+        <div>
+          <h4 className="text-xs text-slate-500 font-medium mb-2">Impact comenzi</h4>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-600">Comanda</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-600">Produs</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-600">Deadline</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-600">Estimare noua</th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-slate-600">Intarziere (zile)</th>
+                  <th className="text-center px-4 py-2 text-xs font-medium text-slate-600">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {orders.map((o, i) => {
+                  const delay = o.delay_days || o.delayDays || 0
+                  const isLate = delay > 0
+                  return (
+                    <tr key={o.id || i} className="hover:bg-slate-50">
+                      <td className="px-4 py-2 font-medium text-slate-800">{o.order_number || o.orderNumber || o.order || `#${o.id || i + 1}`}</td>
+                      <td className="px-4 py-2 text-slate-600">{o.product || o.product_name || o.productName || '-'}</td>
+                      <td className="px-4 py-2 text-slate-500">{o.deadline ? new Date(o.deadline).toLocaleDateString('ro-RO') : '-'}</td>
+                      <td className="px-4 py-2 text-slate-500">{(o.new_estimate || o.newEstimate || o.estimated_end) ? new Date(o.new_estimate || o.newEstimate || o.estimated_end).toLocaleDateString('ro-RO') : '-'}</td>
+                      <td className={`px-4 py-2 text-right font-medium ${isLate ? 'text-red-600' : 'text-green-600'}`}>{delay > 0 ? `+${delay}` : delay}</td>
+                      <td className="px-4 py-2 text-center">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isLate ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {isLate ? 'intarziat' : 'la timp'}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Machine load comparison */}
+      {machineLoad.length > 0 && (
+        <div>
+          <h4 className="text-xs text-slate-500 font-medium mb-2">Incarcare masini (inainte vs. dupa)</h4>
+          <div className="space-y-2">
+            {machineLoad.map((m, i) => {
+              const before = m.load_before || m.load_base || m.load_current || 0
+              const after = m.load_after || m.load_simulation || m.load || 0
+              return (
+                <div key={m.machine || m.machine_code || i} className="bg-slate-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-slate-700">{m.machine || m.machine_code || m.machine_name || `Masina ${i + 1}`}</span>
+                    <span className="text-xs text-slate-400">{before}% {'\u2192'} {after}%</span>
+                  </div>
+                  <div className="flex gap-1 h-4">
+                    <div className="flex-1 bg-slate-200 rounded overflow-hidden" title={`Inainte: ${before}%`}>
+                      <div className="h-full bg-blue-400 rounded" style={{ width: `${Math.min(100, before)}%` }} />
+                    </div>
+                    <div className="flex-1 bg-slate-200 rounded overflow-hidden" title={`Dupa: ${after}%`}>
+                      <div className={`h-full rounded ${after > 90 ? 'bg-red-400' : after > 75 ? 'bg-amber-400' : 'bg-green-400'}`} style={{ width: `${Math.min(100, after)}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                    <span>Inainte</span>
+                    <span>Dupa simulare</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --------------- Simulation Detail Modal ---------------
 function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }) {
   const { data: detail } = useQuery({
     queryKey: ['scheduling-simulation', sim.id],
     queryFn: () => api.get(`/scheduling/simulations/${sim.id}`).then(r => r.data),
   })
 
-  const { data: comparison } = useQuery({
+  const { data: comparison, isLoading: compareLoading } = useQuery({
     queryKey: ['scheduling-simulation-compare', sim.id],
     queryFn: () => api.get(`/scheduling/simulations/${sim.id}/compare`).then(r => r.data),
   })
 
   const sd = detail || sim
+
   const params = sd.scenario_params
     ? (typeof sd.scenario_params === 'string' ? (() => { try { return JSON.parse(sd.scenario_params) } catch { return null } })() : sd.scenario_params)
-    : null
+    : (sd.constraintsModified
+      ? (typeof sd.constraintsModified === 'string' ? (() => { try { return JSON.parse(sd.constraintsModified) } catch { return null } })() : sd.constraintsModified)
+      : null)
+
+  const DETAIL_LABELS = {
+    disabled_machines: 'Masini dezactivate',
+    urgent_order: 'Comanda urgenta',
+    urgent_orders: 'Comenzi urgente',
+    allow_overtime: 'Overtime permis',
+    allow_weekend: 'Weekend permis',
+    shifts: 'Schimburi / zi',
+    custom: 'Scenariu custom',
+  }
+
+  function fmtVal(val) {
+    if (val === true) return 'Da'
+    if (val === false) return 'Nu'
+    if (Array.isArray(val)) return val.length > 0 ? val.join(', ') : 'Niciunul'
+    if (val === null || val === undefined || val === '') return '-'
+    if (typeof val === 'object') {
+      const entries = Object.entries(val)
+      if (entries.length === 0) return '-'
+      return entries.map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(', ')
+    }
+    return String(val)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b">
-          <h3 className="font-semibold text-slate-800">{sd.name}</h3>
+          <div>
+            <h3 className="font-semibold text-slate-800">{sd.name}</h3>
+            {sd.created_at && <p className="text-xs text-slate-400 mt-0.5">{new Date(sd.created_at).toLocaleString('ro-RO')}</p>}
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
           <div className="text-sm text-slate-600">{sd.description || 'Fara descriere'}</div>
 
-          {params && typeof params === 'object' && (
+          {params && typeof params === 'object' && Object.keys(params).length > 0 && (
             <div>
-              <div className="text-xs text-slate-500 font-medium mb-2">Parametri scenariu</div>
+              <h4 className="text-xs text-slate-500 font-medium mb-2">Parametri scenariu</h4>
               <div className="grid grid-cols-2 gap-3">
                 {Object.entries(params).map(([key, val]) => (
                   <div key={key} className="bg-slate-50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500">{PARAM_LABELS[key] || key}</div>
-                    <div className="font-medium text-slate-800 text-sm">{formatParamValue(key, val)}</div>
+                    <div className="text-xs text-slate-500">{DETAIL_LABELS[key] || key}</div>
+                    <div className="font-medium text-slate-800 text-sm">{fmtVal(val)}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {comparison && (
-            <div>
-              <div className="text-xs text-slate-500 font-medium mb-2">Comparatie cu planificarea curenta</div>
-              <div className="space-y-3">
-                {Object.entries(comparison).map(([key, val]) => {
-                  // If val is an object with sub-properties (e.g. base, simulation), render as a card with details
-                  if (val && typeof val === 'object' && !Array.isArray(val)) {
-                    return (
-                      <div key={key} className="bg-slate-50 rounded-lg p-3">
-                        <div className="text-xs text-slate-500 font-medium mb-1.5">{PARAM_LABELS[key] || key}</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.entries(val).map(([subKey, subVal]) => (
-                            <div key={subKey} className="bg-white rounded p-2 border border-slate-100">
-                              <div className="text-[10px] text-slate-400">{PARAM_LABELS[subKey] || subKey}</div>
-                              <div className="text-sm font-medium text-slate-800">
-                                {typeof subVal === 'object' && subVal !== null
-                                  ? Object.entries(subVal).map(([k, v]) => `${k}: ${v}`).join(' | ')
-                                  : formatParamValue(subKey, subVal)}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  }
-                  return (
-                    <div key={key} className="bg-slate-50 rounded-lg p-3">
-                      <div className="text-xs text-slate-500">{PARAM_LABELS[key] || key}</div>
-                      <div className="font-medium text-slate-800 text-sm">{formatParamValue(key, val)}</div>
-                    </div>
-                  )
-                })}
-              </div>
+          {compareLoading && <p className="text-slate-400 text-sm">Se incarca datele de comparatie...</p>}
+
+          {!compareLoading && comparison && (
+            <SimulationResultView result={{ detail, compare: comparison }} />
+          )}
+
+          {!compareLoading && !comparison && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
+              Simulare fara date de comparatie.
             </div>
           )}
         </div>
@@ -970,7 +1230,7 @@ function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }
             <Trash2 size={14} /> Sterge
           </button>
           <button onClick={() => onApply(sim.id)} disabled={applyPending} className="btn-primary flex items-center gap-2">
-            <CheckCircle size={14} /> {applyPending ? 'Se aplica...' : 'Aplica'}
+            <CheckCircle size={14} /> {applyPending ? 'Se aplica...' : 'Aplica planul simulat'}
           </button>
         </div>
       </div>

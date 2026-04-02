@@ -224,18 +224,35 @@ function ReportByOrder() {
 
 /* ── Report by Operator ── */
 
-function ReportByOperator() {
+function ReportByOperator({ operatorId, setOperatorId, usersList, dateFrom, dateTo, setDateFrom, setDateTo }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['report-by-operator'],
-    queryFn: () => api.get('/reports/prr/by-operator').then(r => r.data),
+    queryKey: ['report-by-operator', operatorId, dateFrom, dateTo],
+    queryFn: () => api.get('/reports/prr/by-operator', { params: { operatorId: operatorId || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined } }).then(r => r.data),
   })
   const rows = data?.data || data || []
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <ExportButton endpoint="/reports/export/pdf" params={{ type: 'prr_operator' }} label="Export PDF" filename="raport_operatori.pdf" />
-        <ExcelExportButton params={{ type: 'prr_operator' }} />
+      <div className="flex gap-3 flex-wrap items-end">
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">De la</label>
+          <input className="input w-36" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Pana la</label>
+          <input className="input w-36" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Operator</label>
+          <select className="input w-48" value={operatorId} onChange={e => setOperatorId(e.target.value)}>
+            <option value="">Toti operatorii</option>
+            {(usersList || []).map(u => (
+              <option key={u.id} value={u.id}>{u.full_name || u.name || u.username || `User #${u.id}`}</option>
+            ))}
+          </select>
+        </div>
+        <ExportButton endpoint="/reports/export/pdf" params={{ type: 'prr_operator', operatorId: operatorId || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }} label="Export PDF" filename="raport_operatori.pdf" />
+        <ExcelExportButton params={{ type: 'prr_operator', operatorId: operatorId || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }} />
       </div>
       {isLoading && <p className="text-slate-400">Se incarca...</p>}
       {rows.length > 0 ? (
@@ -274,6 +291,8 @@ export default function ReportsPage() {
   const [dateTo, setDateTo] = useState('')
   const [product, setProduct] = useState('')
   const [machineId, setMachineId] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [operatorId, setOperatorId] = useState('')
   const [week, setWeek] = useState('')
   const [month, setMonth] = useState('')
   const [year, setYear] = useState(new Date().getFullYear().toString())
@@ -291,6 +310,20 @@ export default function ReportsPage() {
     staleTime: 5 * 60 * 1000,
   })
   const productsList = productsRaw?.data || productsRaw || []
+
+  const { data: companiesRaw } = useQuery({
+    queryKey: ['companies-list'],
+    queryFn: () => api.get('/companies').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const companiesList = companiesRaw?.data || companiesRaw || []
+
+  const { data: usersRaw } = useQuery({
+    queryKey: ['users-list'],
+    queryFn: () => api.get('/auth/users').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const usersList = usersRaw?.data || usersRaw || []
 
   const byProduct = useQuery({
     queryKey: ['report-product', dateFrom, dateTo, product],
@@ -310,16 +343,53 @@ export default function ReportsPage() {
     enabled: tab === 'machine' && !!(dateFrom && dateTo),
   })
 
+  // Compute dateFrom/dateTo from week input (e.g. "2026-W14" -> Mon..Sun)
+  function weekToDates(weekStr) {
+    if (!weekStr) return { wDateFrom: '', wDateTo: '' }
+    const [y, w] = weekStr.split('-W').map(Number)
+    const jan4 = new Date(y, 0, 4)
+    const dayOfWeek = jan4.getDay() || 7
+    const monday = new Date(jan4)
+    monday.setDate(jan4.getDate() - dayOfWeek + 1 + (w - 1) * 7)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    return {
+      wDateFrom: monday.toISOString().split('T')[0],
+      wDateTo: sunday.toISOString().split('T')[0],
+    }
+  }
+  const { wDateFrom, wDateTo } = weekToDates(week)
+
   const weekly = useQuery({
-    queryKey: ['report-weekly', week],
-    queryFn: () => api.get('/reports/prr/weekly-summary', { params: { week } }).then(r => r.data),
+    queryKey: ['report-weekly', week, wDateFrom, wDateTo],
+    queryFn: () => api.get('/reports/prr/weekly-summary', { params: { week, dateFrom: wDateFrom, dateTo: wDateTo } }).then(r => r.data),
     enabled: tab === 'weekly' && !!week,
   })
 
+  // Compute dateFrom/dateTo from month/year
+  function monthToDates(m, y) {
+    if (!m || !y) return { mDateFrom: '', mDateTo: '' }
+    const mi = Number(m)
+    const yi = Number(y)
+    const first = new Date(yi, mi - 1, 1)
+    const last = new Date(yi, mi, 0)
+    return {
+      mDateFrom: first.toISOString().split('T')[0],
+      mDateTo: last.toISOString().split('T')[0],
+    }
+  }
+  const { mDateFrom, mDateTo } = monthToDates(month, year)
+
   const monthly = useQuery({
-    queryKey: ['report-monthly', month, year],
-    queryFn: () => api.get('/reports/prr/month-comparison', { params: { month, year } }).then(r => r.data),
+    queryKey: ['report-monthly', month, year, mDateFrom, mDateTo],
+    queryFn: () => api.get('/reports/prr/month-comparison', { params: { month, year, dateFrom: mDateFrom, dateTo: mDateTo } }).then(r => r.data),
     enabled: tab === 'monthly' && !!(month && year),
+  })
+
+  const byCompany = useQuery({
+    queryKey: ['report-company', dateFrom, dateTo, companyId],
+    queryFn: () => api.get('/reports/prr/by-product', { params: { dateFrom, dateTo, companyId: companyId || undefined } }).then(r => r.data),
+    enabled: tab === 'byCompany' && !!(dateFrom && dateTo),
   })
 
   const tabCls = t => t === tab
@@ -328,9 +398,10 @@ export default function ReportsPage() {
 
   const productList = byProduct.data?.data || byProduct.data || []
   const machineList = byMachine.data?.data || byMachine.data || []
-  const weekData = weekly.data
+  const weekData = weekly.data?.data || weekly.data
   const monthList = monthly.data?.data || monthly.data || []
   const trendList = trend.data?.data || trend.data || []
+  const companyList = byCompany.data?.data || byCompany.data || []
 
   function handleLoadSaved(report) {
     const p = report.filters || report.params || {}
@@ -340,7 +411,9 @@ export default function ReportsPage() {
     if (p.week) setWeek(p.week)
     if (p.month) setMonth(p.month)
     if (p.year) setYear(p.year)
-    const typeMap = { prr_product: 'product', prr_machine: 'machine', prr_order: 'byOrder', prr_operator: 'byOperator', prr_weekly_summary: 'weekly', month_comparison: 'monthly', weekly: 'weekly', monthly: 'monthly' }
+    if (p.companyId) setCompanyId(p.companyId)
+    if (p.operatorId) setOperatorId(p.operatorId)
+    const typeMap = { prr_product: 'product', prr_machine: 'machine', prr_order: 'byOrder', prr_operator: 'byOperator', prr_company: 'byCompany', prr_weekly_summary: 'weekly', month_comparison: 'monthly', weekly: 'weekly', monthly: 'monthly' }
     const rt = report.report_type || report.type
     if (typeMap[rt]) setTab(typeMap[rt])
     toast.success(`Raport "${report.name}" incarcat.`)
@@ -354,6 +427,7 @@ export default function ReportsPage() {
         <button className={tabCls('machine')} onClick={() => setTab('machine')}>Per Masina</button>
         <button className={tabCls('byOrder')} onClick={() => setTab('byOrder')}>Per Comanda</button>
         <button className={tabCls('byOperator')} onClick={() => setTab('byOperator')}>Per Operator</button>
+        <button className={tabCls('byCompany')} onClick={() => setTab('byCompany')}>Per Companie</button>
         <button className={tabCls('weekly')} onClick={() => setTab('weekly')}>Sumar Saptamanal</button>
         <button className={tabCls('monthly')} onClick={() => setTab('monthly')}>Comparatie Luna</button>
         <button className={tabCls('saved')} onClick={() => setTab('saved')}>
@@ -504,7 +578,65 @@ export default function ReportsPage() {
 
       {tab === 'byOrder' && <ReportByOrder />}
 
-      {tab === 'byOperator' && <ReportByOperator />}
+      {tab === 'byOperator' && (
+        <ReportByOperator operatorId={operatorId} setOperatorId={setOperatorId} usersList={usersList} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} />
+      )}
+
+      {tab === 'byCompany' && (
+        <div className="space-y-4">
+          <div className="flex gap-3 flex-wrap items-end">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">De la</label>
+              <input className="input w-36" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Pana la</label>
+              <input className="input w-36" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Companie</label>
+              <select className="input w-48" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+                <option value="">Toate companiile</option>
+                {companiesList.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <ExcelExportButton params={{ type: 'prr_company', dateFrom, dateTo, companyId: companyId || undefined }} />
+          </div>
+          {byCompany.isLoading && <p className="text-slate-400">Se incarca...</p>}
+          {!(dateFrom && dateTo) && <p className="text-slate-400 text-sm">Selecteaza intervalul de date.</p>}
+          {companyList.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Reper</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Planificat</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Realizat</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Rebuturi</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Rata Rebut %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {companyList.map((r, i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-800">{r.product || r.reper || '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{r.planned ?? '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{r.actual ?? '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{r.scrap ?? '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{r.scrap_rate != null ? `${r.scrap_rate?.toFixed(1)}%` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {dateFrom && dateTo && !byCompany.isLoading && companyList.length === 0 && (
+            <p className="text-slate-400 text-sm">Fara date pentru selectia curenta.</p>
+          )}
+        </div>
+      )}
 
       {tab === 'weekly' && (
         <div className="space-y-4">
@@ -513,7 +645,7 @@ export default function ReportsPage() {
               <label className="text-xs text-slate-500 block mb-1">Saptamana</label>
               <input className="input w-44" type="week" value={week} onChange={e => setWeek(e.target.value)} />
             </div>
-            <ExcelExportButton params={{ type: 'weekly', week }} />
+            <ExcelExportButton params={{ type: 'weekly', week, dateFrom: wDateFrom, dateTo: wDateTo }} />
           </div>
           {weekly.isLoading && <p className="text-slate-400">Se incarca...</p>}
           {weekData && (
@@ -580,7 +712,7 @@ export default function ReportsPage() {
               <label className="text-xs text-slate-500 block mb-1">An</label>
               <input className="input w-24" type="number" value={year} onChange={e => setYear(e.target.value)} />
             </div>
-            <ExcelExportButton params={{ type: 'monthly', month, year }} />
+            <ExcelExportButton params={{ type: 'monthly', month, year, dateFrom: mDateFrom, dateTo: mDateTo }} />
           </div>
           {monthly.isLoading && <p className="text-slate-400">Se incarca...</p>}
           {!(month && year) && <p className="text-slate-400 text-sm">Selecteaza luna si anul.</p>}
