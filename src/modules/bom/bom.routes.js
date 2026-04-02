@@ -12,6 +12,7 @@ router.use(authenticate);
 
 // Products
 router.get('/products', c.getProducts);
+router.get('/products/:id/tree', c.getProductTree);
 router.get('/products/:id', c.getProductById);
 router.post('/products', mgr, validate(v.createProduct), c.postProduct);
 router.put('/products/:id', mgr, validate(v.updateProduct), c.putProduct);

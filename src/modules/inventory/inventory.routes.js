@@ -6,6 +6,8 @@ import * as c from './inventory.controller.js';
 import * as suppliers from './item-suppliers.service.js';
 import * as mrpSvc from '../../services/mrp.service.js';
 import * as aggPurchasing from '../../services/aggregated-purchasing.service.js';
+import * as locSvc from '../../services/location.service.js';
+import * as remSvc from '../../services/remnant.service.js';
 
 const router = Router();
 const mgr = authorize('admin', 'production_manager');
@@ -57,6 +59,46 @@ router.get('/items/:itemId/purchase-history', authenticate, async (req, res, nex
 });
 router.get('/items/:itemId/price-trend', authenticate, async (req, res, next) => {
   try { res.json(await suppliers.getPriceTrend(req.params.itemId)); } catch(e) { next(e); }
+});
+
+// Locations
+router.get('/locations', async (req, res, next) => {
+  try {
+    const tenantId = req.tenantFilter?.tenantId || null;
+    res.json(await locSvc.listLocations(tenantId, req.query.type));
+  } catch (e) { next(e); }
+});
+router.post('/locations', mgr, async (req, res, next) => {
+  try { res.status(201).json(await locSvc.createLocation(req.body)); } catch (e) { next(e); }
+});
+router.put('/locations/:id', mgr, async (req, res, next) => {
+  try { res.json(await locSvc.updateLocation(req.params.id, req.body)); } catch (e) { next(e); }
+});
+router.delete('/locations/:id', mgr, async (req, res, next) => {
+  try { await locSvc.deleteLocation(req.params.id); res.json({ message: 'Locatie dezactivata.' }); } catch (e) { next(e); }
+});
+
+// Remnants
+router.get('/remnants', async (req, res, next) => {
+  try {
+    const tenantId = req.tenantFilter?.tenantId || null;
+    res.json(await remSvc.listRemnants(tenantId, req.query));
+  } catch (e) { next(e); }
+});
+router.post('/remnants', ops, async (req, res, next) => {
+  try { res.status(201).json(await remSvc.createRemnant(req.body)); } catch (e) { next(e); }
+});
+router.get('/remnants/match', async (req, res, next) => {
+  try {
+    const { materialGrade, shape, requiredDiameter, requiredLength } = req.query;
+    res.json(await remSvc.findMatchingRemnants(materialGrade, shape, requiredDiameter ? Number(requiredDiameter) : null, requiredLength ? Number(requiredLength) : null));
+  } catch (e) { next(e); }
+});
+router.put('/remnants/:id/use', ops, async (req, res, next) => {
+  try { await remSvc.useRemnant(req.params.id); res.json({ message: 'Rest marcat ca utilizat.' }); } catch (e) { next(e); }
+});
+router.put('/remnants/:id/scrap', ops, async (req, res, next) => {
+  try { await remSvc.scrapRemnant(req.params.id); res.json({ message: 'Rest marcat ca rebut.' }); } catch (e) { next(e); }
 });
 
 // MRP - Material Requirements Planning

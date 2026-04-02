@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Search, Calendar, ChevronLeft, ChevronRight, Trash2, XCircle } from 'lucide-react'
+import { Plus, Pencil, Search, Calendar, ChevronLeft, ChevronRight, Trash2, XCircle, ShieldCheck } from 'lucide-react'
 import { useLookup, getLookupLabel } from '../hooks/useLookup'
 
 const STATUS_COLORS = { pending: 'bg-slate-100 text-slate-600', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' }
@@ -294,6 +294,28 @@ export default function SkillMatrixPage() {
     enabled: tab === 'calendar',
   })
 
+  const { data: certMachines } = useQuery({
+    queryKey: ['machines-for-cert'],
+    queryFn: () => api.get('/machines').then(r => r.data?.data || r.data || []),
+    enabled: tab === 'certifications',
+  })
+
+  const { data: certMatrix } = useQuery({
+    queryKey: ['cert-matrix', certMachines?.map(m => m.id).join(',')],
+    queryFn: async () => {
+      const machineList = certMachines || []
+      const results = {}
+      for (const m of machineList) {
+        try {
+          const ops = await api.get(`/machines/${m.id}/certified-operators`).then(r => r.data)
+          results[m.id] = ops || []
+        } catch { results[m.id] = [] }
+      }
+      return results
+    },
+    enabled: tab === 'certifications' && certMachines && certMachines.length > 0,
+  })
+
   const deleteMut = useMutation({
     mutationFn: id => api.delete(`/hr/skills/${id}`),
     onSuccess: () => { qc.invalidateQueries(['skill-matrix']); toast.success('Skill sters.') },
@@ -338,6 +360,7 @@ export default function SkillMatrixPage() {
       <h1 className="text-2xl font-bold text-slate-800 mb-6">Competente & Concedii</h1>
       <div className="flex border-b border-slate-200 mb-4 overflow-x-auto">
         <button className={tabCls('matrix')} onClick={() => setTab('matrix')}>Matrice Competente</button>
+        <button className={tabCls('certifications')} onClick={() => setTab('certifications')}>Certificari masini</button>
         <button className={tabCls('levels')} onClick={() => setTab('levels')}>Niveluri competenta</button>
         <button className={tabCls('leave')} onClick={() => setTab('leave')}>Concedii</button>
         <button className={tabCls('availability')} onClick={() => setTab('availability')}>Disponibilitate</button>
@@ -602,6 +625,65 @@ export default function SkillMatrixPage() {
               </div>
             )
           })()}
+        </div>
+      )}
+
+      {tab === 'certifications' && (
+        <div>
+          <h4 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2"><ShieldCheck size={16} /> Operator x Tip masina — Certificari</h4>
+          {(!certMachines || certMachines.length === 0) ? (
+            <p className="text-slate-400 text-sm">Se incarca sau nu exista utilaje.</p>
+          ) : (
+            <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
+              <table className="text-sm">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600 min-w-36 sticky left-0 bg-slate-50">Operator</th>
+                    {(certMachines || []).map(m => (
+                      <th key={m.id} className="px-3 py-3 font-medium text-slate-600 text-center whitespace-nowrap">
+                        <div>{m.name}</div>
+                        {m.controller_type && <div className="text-xs font-normal text-indigo-500">{m.controller_type}</div>}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(() => {
+                    // Collect all unique operators across all machines
+                    const allOps = {}
+                    for (const mId of Object.keys(certMatrix || {})) {
+                      for (const op of (certMatrix[mId] || [])) {
+                        if (!allOps[op.id]) allOps[op.id] = { id: op.id, full_name: op.full_name }
+                      }
+                    }
+                    const opList = Object.values(allOps).sort((a, b) => a.full_name.localeCompare(b.full_name))
+                    if (opList.length === 0) return (
+                      <tr><td colSpan={(certMachines || []).length + 1} className="px-4 py-8 text-center text-slate-400">Nicio certificare inregistrata.</td></tr>
+                    )
+                    return opList.map(op => (
+                      <tr key={op.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800 sticky left-0 bg-white">{op.full_name}</td>
+                        {(certMachines || []).map(m => {
+                          const cert = (certMatrix?.[m.id] || []).find(c => c.id === op.id)
+                          if (!cert) return <td key={m.id} className="px-3 py-3 text-center"><span className="text-slate-200">—</span></td>
+                          const isExpired = cert.expiry_date && new Date(cert.expiry_date) < new Date()
+                          const isExpiring = cert.expiry_date && !isExpired && new Date(cert.expiry_date) < new Date(Date.now() + 30 * 86400000)
+                          const color = isExpired ? 'bg-red-100 text-red-700' : isExpiring ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                          return (
+                            <td key={m.id} className="px-3 py-3 text-center">
+                              <span className={`text-xs px-2 py-1 rounded-full ${color}`}>
+                                {cert.certification_level}
+                              </span>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

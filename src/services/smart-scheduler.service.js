@@ -105,10 +105,13 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
         continue;
       }
 
-      // Calculate hours needed
+      // Calculate hours needed (nr_cavities: multiple pieces per cycle)
       const cycleTime = Number(op.cycle_time_seconds) || 60;
       const setupTime = Number(op.setup_time_minutes) || 0;
-      const totalHours = (piece.remainingQuantity * cycleTime / 3600) + (setupTime / 60);
+      const nrCavities = Number(op.nr_cavities) || 1;
+      const effectivePiecesPerCycle = nrCavities;
+      const totalCycles = Math.ceil(piece.remainingQuantity / effectivePiecesPerCycle);
+      const totalHours = (totalCycles * cycleTime / 3600) + (setupTime / 60);
 
       // Find available date on this machine
       const { date: allocDate } = getAvailableDate(targetMachine.id, totalHours, opStartDate);
@@ -116,7 +119,7 @@ export async function generateSmartPlan(configId, periodStart, periodEnd, userId
       // Split across multiple days if needed
       let remainingHours = totalHours;
       let dayDate = new Date(allocDate);
-      const piecesPerHour = 3600 / cycleTime;
+      const piecesPerHour = (3600 / cycleTime) * nrCavities;
 
       while (remainingHours > 0) {
         const dateStr = dayDate.toISOString().split('T')[0];

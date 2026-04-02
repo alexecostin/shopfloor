@@ -13,6 +13,8 @@ export const createMachineSchema = Joi.object({
   location: Joi.string().max(255).optional().allow(''),
   status: Joi.string().valid('active', 'maintenance', 'inactive').optional(),
   metadata: Joi.object().optional(),
+  controller_type: Joi.string().max(50).optional().allow('', null),
+  controller_model: Joi.string().max(100).optional().allow('', null),
 });
 
 export const updateMachineSchema = Joi.object({
@@ -21,6 +23,8 @@ export const updateMachineSchema = Joi.object({
   location: Joi.string().max(255).optional().allow(''),
   status: Joi.string().valid('active', 'maintenance', 'inactive').optional(),
   metadata: Joi.object().optional(),
+  controller_type: Joi.string().max(50).optional().allow('', null),
+  controller_model: Joi.string().max(100).optional().allow('', null),
 });
 
 export const assignOperatorSchema = Joi.object({

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, AlertTriangle, ArrowUpDown, Package, Pencil, Trash2, X, TrendingUp } from 'lucide-react'
+import { Plus, AlertTriangle, ArrowUpDown, Package, Pencil, Trash2, X, TrendingUp, MapPin, Scissors, Search } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 import { useLookup } from '../hooks/useLookup'
 import { formatMoney } from '../utils/currency'
@@ -394,12 +394,24 @@ function ItemDetail({ item, onClose }) {
 
 export default function InventoryPage() {
   const { user } = useAuth()
+  const qc = useQueryClient()
   const [tab, setTab] = useState('items')
   const [modal, setModal] = useState(false)
   const [movementItem, setMovementItem] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
   const [search, setSearch] = useState('')
   const isManager = ['admin', 'production_manager'].includes(user?.role)
+
+  // Locations state
+  const [locModal, setLocModal] = useState(null) // null | {} for new | location obj for edit
+  const [locForm, setLocForm] = useState({ code: '', name: '', locationType: 'raw_material', zone: '', capacity: '', capacityUnit: 'buc' })
+
+  // Remnants state
+  const [remModal, setRemModal] = useState(false)
+  const [remForm, setRemForm] = useState({ materialCode: '', materialName: '', materialGrade: '', shape: 'bar', length: '', width: '', diameter: '', thickness: '', weightKg: '', locationId: '' })
+  const [remFilters, setRemFilters] = useState({ materialGrade: '', shape: '', minDiameter: '', minLength: '' })
+  const [matchMode, setMatchMode] = useState(false)
+  const [matchParams, setMatchParams] = useState({ materialGrade: '', shape: 'bar', requiredDiameter: '', requiredLength: '' })
 
   const { data: itemsRaw, isLoading } = useQuery({
     queryKey: ['inventory-items', search],
@@ -429,6 +441,59 @@ export default function InventoryPage() {
 
   const stockLevelList = stockLevels?.data || stockLevels || []
 
+  // Locations
+  const { data: locations, isLoading: locLoading } = useQuery({
+    queryKey: ['inventory-locations'],
+    queryFn: () => api.get('/inventory/locations').then(r => r.data),
+    enabled: tab === 'locations',
+  })
+  const locationList = locations?.data || locations || []
+
+  const locMutation = useMutation({
+    mutationFn: (data) => data.id ? api.put(`/inventory/locations/${data.id}`, data) : api.post('/inventory/locations', data),
+    onSuccess: () => { qc.invalidateQueries(['inventory-locations']); toast.success('Locatie salvata.'); setLocModal(null) },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
+  })
+
+  const locDeleteMut = useMutation({
+    mutationFn: (id) => api.delete(`/inventory/locations/${id}`),
+    onSuccess: () => { qc.invalidateQueries(['inventory-locations']); toast.success('Locatie dezactivata.') },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
+  })
+
+  // Remnants
+  const { data: remnants, isLoading: remLoading } = useQuery({
+    queryKey: ['inventory-remnants', remFilters],
+    queryFn: () => api.get('/inventory/remnants', { params: remFilters }).then(r => r.data),
+    enabled: tab === 'remnants',
+  })
+  const remnantList = remnants?.data || remnants || []
+
+  const remCreateMut = useMutation({
+    mutationFn: (data) => api.post('/inventory/remnants', data),
+    onSuccess: () => { qc.invalidateQueries(['inventory-remnants']); toast.success('Rest adaugat.'); setRemModal(false) },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
+  })
+
+  const remUseMut = useMutation({
+    mutationFn: (id) => api.put(`/inventory/remnants/${id}/use`),
+    onSuccess: () => { qc.invalidateQueries(['inventory-remnants']); toast.success('Rest marcat ca utilizat.') },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
+  })
+
+  const remScrapMut = useMutation({
+    mutationFn: (id) => api.put(`/inventory/remnants/${id}/scrap`),
+    onSuccess: () => { qc.invalidateQueries(['inventory-remnants']); toast.success('Rest marcat ca rebut.') },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
+  })
+
+  const { data: matchResults } = useQuery({
+    queryKey: ['remnant-match', matchParams],
+    queryFn: () => api.get('/inventory/remnants/match', { params: matchParams }).then(r => r.data),
+    enabled: matchMode && !!matchParams.materialGrade,
+  })
+  const matchList = matchResults?.data || matchResults || []
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -438,10 +503,20 @@ export default function InventoryPage() {
             <Plus size={15} /> Articol nou
           </button>
         )}
+        {isManager && tab === 'locations' && (
+          <button onClick={() => { setLocForm({ code: '', name: '', locationType: 'raw_material', zone: '', capacity: '', capacityUnit: 'buc' }); setLocModal({}) }} className="btn-primary flex items-center gap-2">
+            <Plus size={15} /> Locatie noua
+          </button>
+        )}
+        {tab === 'remnants' && (
+          <button onClick={() => { setRemForm({ materialCode: '', materialName: '', materialGrade: '', shape: 'bar', length: '', width: '', diameter: '', thickness: '', weightKg: '', locationId: '' }); setRemModal(true) }} className="btn-primary flex items-center gap-2">
+            <Plus size={15} /> Adauga rest
+          </button>
+        )}
       </div>
 
-      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
-        {[['items', 'Articole'], ['stock-levels', 'Niveluri Stoc'], ['alerts', 'Alerte'], ['dashboard', 'Dashboard']].map(([t, l]) => (
+      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit flex-wrap">
+        {[['items', 'Articole'], ['stock-levels', 'Niveluri Stoc'], ['locations', 'Locatii'], ['remnants', 'Resturi utilizabile'], ['alerts', 'Alerte'], ['dashboard', 'Dashboard']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors
               ${tab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -672,9 +747,316 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {tab === 'locations' && (
+        <>
+          {locLoading && <p className="text-slate-400 text-sm">Se incarca...</p>}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600">Cod</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600">Nume</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600">Tip</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Zona</th>
+                  <th className="text-right px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Capacitate</th>
+                  {isManager && <th className="px-4 py-3" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {locationList.map(loc => {
+                  const typeLabels = { raw_material: 'Materie prima', wip: 'WIP', finished_good: 'Produs finit', remnant: 'Resturi', scrap: 'Rebut' }
+                  const typeColors = { raw_material: 'bg-blue-100 text-blue-700', wip: 'bg-amber-100 text-amber-700', finished_good: 'bg-green-100 text-green-700', remnant: 'bg-purple-100 text-purple-700', scrap: 'bg-red-100 text-red-700' }
+                  return (
+                    <tr key={loc.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono text-xs text-blue-600">{loc.code}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{loc.name}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeColors[loc.location_type] || 'bg-slate-100 text-slate-600'}`}>
+                          {typeLabels[loc.location_type] || loc.location_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 text-xs hidden md:table-cell">{loc.zone || '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">
+                        {loc.capacity ? `${loc.capacity} ${loc.capacity_unit || ''}` : '—'}
+                      </td>
+                      {isManager && (
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => { setLocForm({ code: loc.code, name: loc.name, locationType: loc.location_type, zone: loc.zone || '', capacity: loc.capacity || '', capacityUnit: loc.capacity_unit || 'buc' }); setLocModal(loc) }} className="text-slate-300 hover:text-blue-500"><Pencil size={14} /></button>
+                            <button onClick={() => { if (confirm('Dezactivezi aceasta locatie?')) locDeleteMut.mutate(loc.id) }} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+                {!locLoading && locationList.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                    <MapPin size={32} className="mx-auto mb-2 text-slate-300" />
+                    Nicio locatie definita.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {tab === 'remnants' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input className="input w-40" placeholder="Grad material" value={remFilters.materialGrade} onChange={e => setRemFilters({ ...remFilters, materialGrade: e.target.value })} />
+            <select className="input w-32" value={remFilters.shape} onChange={e => setRemFilters({ ...remFilters, shape: e.target.value })}>
+              <option value="">Toate formele</option>
+              <option value="bar">Bara</option>
+              <option value="plate">Tabla</option>
+              <option value="tube">Teava</option>
+              <option value="profile">Profil</option>
+            </select>
+            <input className="input w-32" type="number" placeholder="Diam. min (mm)" value={remFilters.minDiameter} onChange={e => setRemFilters({ ...remFilters, minDiameter: e.target.value })} />
+            <input className="input w-32" type="number" placeholder="Lung. min (mm)" value={remFilters.minLength} onChange={e => setRemFilters({ ...remFilters, minLength: e.target.value })} />
+            <button onClick={() => setMatchMode(!matchMode)} className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${matchMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+              <Search size={12} className="inline mr-1" /> Cauta rest compatibil
+            </button>
+          </div>
+
+          {matchMode && (
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100 space-y-2">
+              <h5 className="text-xs font-medium text-blue-700">Cauta resturi compatibile cu dimensiunile necesare</h5>
+              <div className="flex gap-2 flex-wrap items-end">
+                <div>
+                  <label className="text-xs text-slate-500 block mb-1">Grad material *</label>
+                  <input className="input text-sm w-32" value={matchParams.materialGrade} onChange={e => setMatchParams({ ...matchParams, materialGrade: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 block mb-1">Forma</label>
+                  <select className="input text-sm w-28" value={matchParams.shape} onChange={e => setMatchParams({ ...matchParams, shape: e.target.value })}>
+                    <option value="bar">Bara</option>
+                    <option value="plate">Tabla</option>
+                    <option value="tube">Teava</option>
+                    <option value="profile">Profil</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 block mb-1">Diametru necesar (mm)</label>
+                  <input className="input text-sm w-32" type="number" value={matchParams.requiredDiameter} onChange={e => setMatchParams({ ...matchParams, requiredDiameter: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 block mb-1">Lungime necesara (mm)</label>
+                  <input className="input text-sm w-32" type="number" value={matchParams.requiredLength} onChange={e => setMatchParams({ ...matchParams, requiredLength: e.target.value })} />
+                </div>
+              </div>
+              {matchParams.materialGrade && (
+                <div className="mt-2">
+                  {matchList.length > 0 ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-green-700 font-medium">{matchList.length} resturi compatibile gasite:</p>
+                      {matchList.map((r, i) => (
+                        <div key={r.id || i} className="bg-white rounded px-3 py-2 text-xs flex items-center justify-between border border-green-200">
+                          <div>
+                            <span className="font-medium text-slate-700">{r.material_name || r.material_code}</span>
+                            <span className="text-slate-400 ml-2">{r.material_grade} / {r.shape}</span>
+                            <span className="text-slate-400 ml-2">
+                              {r.dimension_diameter ? `D${r.dimension_diameter}` : ''}{r.dimension_length ? ` x L${r.dimension_length}` : ''}mm
+                            </span>
+                            {r.excessLength != null && <span className="text-green-600 ml-2">Exces: {r.excessLength}mm</span>}
+                          </div>
+                          <button onClick={() => remUseMut.mutate(r.id)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Utilizeaza</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-xs text-slate-400">Niciun rest compatibil gasit.</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {remLoading && <p className="text-slate-400 text-sm">Se incarca...</p>}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600">Material</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600">Grad</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600">Forma</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Dimensiuni</th>
+                  <th className="text-right px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Greutate</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {remnantList.map(r => {
+                  const dims = [
+                    r.dimension_diameter ? `D${r.dimension_diameter}` : null,
+                    r.dimension_length ? `L${r.dimension_length}` : null,
+                    r.dimension_width ? `W${r.dimension_width}` : null,
+                    r.dimension_thickness ? `T${r.dimension_thickness}` : null,
+                  ].filter(Boolean).join(' x ')
+                  const shapeLabels = { bar: 'Bara', plate: 'Tabla', tube: 'Teava', profile: 'Profil' }
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-800 text-sm">{r.material_name || r.material_code}</div>
+                        <div className="text-xs text-slate-400">{r.material_code}</div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">{r.material_grade || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{shapeLabels[r.shape] || r.shape}</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 text-xs hidden md:table-cell">{dims || '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{r.weight_kg ? `${r.weight_kg} kg` : '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1 justify-end">
+                          <button onClick={() => { if (confirm('Marchezi ca utilizat?')) remUseMut.mutate(r.id) }} className="text-xs text-blue-500 hover:text-blue-700">Utilizeaza</button>
+                          <button onClick={() => { if (confirm('Marchezi ca rebut?')) remScrapMut.mutate(r.id) }} className="text-xs text-red-400 hover:text-red-600 ml-2">Rebut</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {!remLoading && remnantList.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                    <Scissors size={32} className="mx-auto mb-2 text-slate-300" />
+                    Niciun rest disponibil.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {modal && <ItemModal onClose={() => setModal(false)} />}
       {movementItem && <MovementModal item={movementItem} onClose={() => setMovementItem(null)} />}
       {selectedItem && <ItemDetail item={selectedItem} onClose={() => setSelectedItem(null)} />}
+
+      {locModal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="font-semibold text-slate-800 mb-4">{locModal?.id ? 'Editeaza locatie' : 'Locatie noua'}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Cod *</label>
+                <input className="input" placeholder="Ex: LOC-MP-01" value={locForm.code} onChange={e => setLocForm({ ...locForm, code: e.target.value })} disabled={!!locModal?.id} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Nume *</label>
+                <input className="input" placeholder="Ex: Depozit materie prima" value={locForm.name} onChange={e => setLocForm({ ...locForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Tip locatie</label>
+                <select className="input" value={locForm.locationType} onChange={e => setLocForm({ ...locForm, locationType: e.target.value })}>
+                  <option value="raw_material">Materie prima</option>
+                  <option value="wip">WIP (Work in Progress)</option>
+                  <option value="finished_good">Produs finit</option>
+                  <option value="remnant">Resturi</option>
+                  <option value="scrap">Rebut</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Zona</label>
+                <input className="input" placeholder="Ex: Hala A" value={locForm.zone} onChange={e => setLocForm({ ...locForm, zone: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Capacitate</label>
+                  <input className="input" type="number" placeholder="Ex: 500" value={locForm.capacity} onChange={e => setLocForm({ ...locForm, capacity: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Unitate capacitate</label>
+                  <input className="input" placeholder="buc, kg, m3" value={locForm.capacityUnit} onChange={e => setLocForm({ ...locForm, capacityUnit: e.target.value })} />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setLocModal(null)} className="btn-secondary">Anuleaza</button>
+              <button
+                onClick={() => locMutation.mutate({ ...(locModal?.id ? { id: locModal.id } : {}), ...locForm })}
+                disabled={locMutation.isPending || !locForm.code || !locForm.name}
+                className="btn-primary"
+              >
+                {locMutation.isPending ? 'Se salveaza...' : 'Salveaza'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {remModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-semibold text-slate-800 mb-4">Adauga rest utilizabil</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Cod material</label>
+                  <input className="input" placeholder="Ex: OL42" value={remForm.materialCode} onChange={e => setRemForm({ ...remForm, materialCode: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Nume material</label>
+                  <input className="input" placeholder="Ex: Otel carbon" value={remForm.materialName} onChange={e => setRemForm({ ...remForm, materialName: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Grad material</label>
+                  <input className="input" placeholder="Ex: S355J2" value={remForm.materialGrade} onChange={e => setRemForm({ ...remForm, materialGrade: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Forma</label>
+                  <select className="input" value={remForm.shape} onChange={e => setRemForm({ ...remForm, shape: e.target.value })}>
+                    <option value="bar">Bara</option>
+                    <option value="plate">Tabla</option>
+                    <option value="tube">Teava</option>
+                    <option value="profile">Profil</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Diametru (mm)</label>
+                  <input className="input" type="number" value={remForm.diameter} onChange={e => setRemForm({ ...remForm, diameter: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Lungime (mm)</label>
+                  <input className="input" type="number" value={remForm.length} onChange={e => setRemForm({ ...remForm, length: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Latime (mm)</label>
+                  <input className="input" type="number" value={remForm.width} onChange={e => setRemForm({ ...remForm, width: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Grosime (mm)</label>
+                  <input className="input" type="number" value={remForm.thickness} onChange={e => setRemForm({ ...remForm, thickness: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Greutate (kg)</label>
+                <input className="input" type="number" step="0.01" placeholder="Ex: 12.5" value={remForm.weightKg} onChange={e => setRemForm({ ...remForm, weightKg: e.target.value })} />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setRemModal(false)} className="btn-secondary">Anuleaza</button>
+              <button
+                onClick={() => remCreateMut.mutate({
+                  ...remForm,
+                  length: remForm.length ? Number(remForm.length) : null,
+                  width: remForm.width ? Number(remForm.width) : null,
+                  diameter: remForm.diameter ? Number(remForm.diameter) : null,
+                  thickness: remForm.thickness ? Number(remForm.thickness) : null,
+                  weightKg: remForm.weightKg ? Number(remForm.weightKg) : null,
+                })}
+                disabled={remCreateMut.isPending || !remForm.materialCode}
+                className="btn-primary"
+              >
+                {remCreateMut.isPending ? 'Se adauga...' : 'Adauga'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

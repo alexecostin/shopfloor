@@ -28,7 +28,8 @@ export async function estimateDelivery(productReference, quantity, options = {})
   for (const op of operations) {
     const cycleTimeSec = Number(op.cycle_time_seconds) || 60;
     const setupMin = Number(op.setup_time_minutes) || 0;
-    const productionHours = (quantity * cycleTimeSec / 3600) + (setupMin / 60);
+    const nrCavities = Number(op.nr_cavities) || 1;
+    const productionHours = (Math.ceil(quantity / nrCavities) * cycleTimeSec / 3600) + (setupMin / 60);
     totalHours += productionHours;
 
     breakdown.push({

@@ -18,6 +18,7 @@ import {
   Wrench, Gauge, ArrowLeft, FileCheck, GripVertical,
   Factory, Layers, Box, Clock, FileText, Cpu, Eye,
   Download, CheckCircle2, CircleDot, ArrowRight, Copy, LayoutTemplate,
+  GitBranch,
 } from 'lucide-react'
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -327,7 +328,8 @@ function SortableOperationCard({ op, onClick, isOver }) {
       {/* Time */}
       <p className="text-[10px] text-slate-400">
         {formatTime(op.cycle_time_seconds, op.time_unit)}
-        {op.setup_time_minutes ? ` + ${op.setup_time_minutes}m setup` : ''}
+        {op.nr_cavities > 1 ? ` x ${op.nr_cavities} cav` : ''}
+        {op.setup_time_minutes ? ` | Setup ${op.setup_time_minutes}m` : ''}
       </p>
 
       {/* Drop indicator for machine */}
@@ -468,6 +470,7 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
     consumables: parseJsonArray(operation.consumables),
     attention_points: parseJsonArray(operation.attention_points),
     min_batch_before_next: operation.min_batch_before_next || '',
+    nr_cavities: operation.nr_cavities || 1,
     transport_time_minutes: operation.transport_time_minutes || '',
     deposit_location: operation.deposit_location || '',
     reject_action: operation.reject_action || 'scrap',
@@ -534,6 +537,7 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
       ...form,
       cycle_time_seconds: form.cycle_time_seconds ? Number(form.cycle_time_seconds) : null,
       setup_time_minutes: form.setup_time_minutes ? Number(form.setup_time_minutes) : null,
+      nr_cavities: form.nr_cavities ? Number(form.nr_cavities) : 1,
       sequence: form.sequence ? Number(form.sequence) : null,
       min_batch_before_next: form.min_batch_before_next ? Number(form.min_batch_before_next) : null,
       transport_time_minutes: form.transport_time_minutes ? Number(form.transport_time_minutes) : null,
@@ -617,9 +621,16 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
             </div>
             <div className="flex items-end pb-1">
               {form.cycle_time_seconds > 0 && (
-                <span className="text-xs text-slate-400">= {Math.round(3600 / Number(form.cycle_time_seconds))} buc/h</span>
+                <span className="text-xs text-slate-400">= {Math.round((3600 / Number(form.cycle_time_seconds)) * (Number(form.nr_cavities) || 1))} buc/h</span>
               )}
             </div>
+          </div>
+
+          {/* Nr Cavities */}
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Numar cavitati / piese per ciclu</label>
+            <input className="input text-sm w-32" type="number" min="1" value={form.nr_cavities} onChange={f('nr_cavities')} />
+            <p className="text-[10px] text-slate-400 mt-1">Cate piese se produc intr-un singur ciclu (ex: matrita cu 4 cavitati = 4 piese/ciclu)</p>
           </div>
 
           {/* Material from inventory + BOM linking */}
@@ -1816,11 +1827,210 @@ function MBOMVisualEditor({ orderId, onBack }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// PRODUCT TREE VIEW (recursive BOM display)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ProductTreeNode({ node, depth = 0 }) {
+  const [expanded, setExpanded] = useState(depth < 2)
+  const hasChildren = node.children?.length > 0
+  const indent = depth * 24
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 py-2 px-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100"
+        style={{ paddingLeft: indent + 12 }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {hasChildren && (
+          <ChevronRight size={14} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        )}
+        {!hasChildren && <div className="w-3.5" />}
+
+        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+          {node.position_code || `L${depth}`}
+        </span>
+        <span className="text-sm font-medium text-slate-800">{node.reference || node.component_reference}</span>
+        <span className="text-xs text-slate-400">{node.name || node.component_name}</span>
+
+        {node.qty_per_parent && node.qty_per_parent > 1 && (
+          <span className="text-xs text-amber-600 font-medium">x{node.qty_per_parent}</span>
+        )}
+
+        {node.material_code && (
+          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 rounded">{node.material_code}</span>
+        )}
+
+        {node.operations?.length > 0 && (
+          <span className="text-[10px] text-green-600">{node.operations.length} op</span>
+        )}
+
+        {node.materials?.length > 0 && (
+          <span className="text-[10px] text-orange-500">{node.materials.length} mat</span>
+        )}
+
+        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+          node.product_type === 'finished' ? 'bg-green-100 text-green-700' :
+          node.product_type === 'semi_finished' ? 'bg-blue-100 text-blue-700' :
+          node.product_type === 'raw_material' ? 'bg-amber-100 text-amber-700' :
+          'bg-slate-100 text-slate-500'
+        }`}>
+          {node.product_type || node.component_type || 'component'}
+        </span>
+      </div>
+
+      {expanded && hasChildren && (
+        <div>
+          {node.children.map((child, i) => (
+            <ProductTreeNode
+              key={child.id || i}
+              node={child.childProduct || child}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProductTreeModal({ productId, productName, onClose }) {
+  const { data: tree, isLoading } = useQuery({
+    queryKey: ['product-tree', productId],
+    queryFn: () => api.get(`/bom/products/${productId}/tree`).then(r => r.data),
+    enabled: !!productId,
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <GitBranch size={18} className="text-blue-600" />
+            <h3 className="font-semibold text-slate-800">Arbore BOM - {productName}</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          {tree && <ProductTreeNode node={tree} depth={0} />}
+          {!isLoading && !tree && (
+            <p className="text-sm text-slate-400 text-center py-8">Nu s-au gasit date pentru arborele BOM.</p>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-slate-200 flex justify-end">
+          <button onClick={onClose} className="btn-secondary text-sm">Inchide</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRODUCT CATALOG TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ProductCatalog() {
+  const [search, setSearch] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [treeProduct, setTreeProduct] = useState(null)
+
+  const { data: productsData, isLoading } = useQuery({
+    queryKey: ['bom-products-catalog', search],
+    queryFn: () => api.get('/bom/products', { params: { limit: 200, search: search || undefined } }).then(r => r.data),
+  })
+
+  const products = productsData?.data || []
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-slate-800">Catalog Produse</h2>
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          className="input pl-9"
+          placeholder="Cauta produse..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Referinta</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Denumire</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Client</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 hidden sm:table-cell">Tip</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
+              <th className="px-4 py-3 font-medium text-slate-600 text-right">Actiuni</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoading && <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">Se incarca...</td></tr>}
+            {products.map(p => (
+              <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-3 font-mono text-xs text-blue-600">{p.reference}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
+                <td className="px-4 py-3 text-xs text-slate-500 hidden md:table-cell">{p.client_name || '-'}</td>
+                <td className="px-4 py-3 hidden sm:table-cell">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    p.product_type === 'finished' ? 'bg-green-100 text-green-700' :
+                    p.product_type === 'semi_finished' ? 'bg-blue-100 text-blue-700' :
+                    p.product_type === 'raw_material' ? 'bg-amber-100 text-amber-700' :
+                    'bg-slate-100 text-slate-500'
+                  }`}>
+                    {p.product_type || '-'}
+                  </span>
+                </td>
+                <td className="px-4 py-3"><MBOMStatusBadge status={p.approval_status} /></td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => setTreeProduct(p)}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                    title="Arbore BOM"
+                  >
+                    <GitBranch size={13} /> Arbore BOM
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {products.length === 0 && !isLoading && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                <Package size={32} className="mx-auto mb-2 text-slate-300" />
+                Niciun produs gasit.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {treeProduct && (
+        <ProductTreeModal
+          productId={treeProduct.id}
+          productName={`${treeProduct.reference} - ${treeProduct.name}`}
+          onClose={() => setTreeProduct(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN BOM PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function BomPage() {
   const [selectedOrderId, setSelectedOrderId] = useState(null)
+  const [activeTab, setActiveTab] = useState('orders')
 
   if (selectedOrderId) {
     return (
@@ -1831,5 +2041,34 @@ export default function BomPage() {
     )
   }
 
-  return <OrderList onSelectOrder={setSelectedOrderId} />
+  return (
+    <div className="space-y-4">
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-slate-200">
+        <button
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'orders'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('orders')}
+        >
+          BOM / MBOM - Comenzi
+        </button>
+        <button
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'catalog'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('catalog')}
+        >
+          Catalog Produse
+        </button>
+      </div>
+
+      {activeTab === 'orders' && <OrderList onSelectOrder={setSelectedOrderId} />}
+      {activeTab === 'catalog' && <ProductCatalog />}
+    </div>
+  )
 }

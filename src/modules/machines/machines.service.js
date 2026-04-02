@@ -47,7 +47,7 @@ export async function getMachine(id) {
   return { ...machine, operators };
 }
 
-export async function createMachine({ code, name, type, location, status, metadata }, req = null) {
+export async function createMachine({ code, name, type, location, status, metadata, controller_type, controller_model }, req = null) {
   const existing = await db(TABLE).where({ code }).first();
   if (existing) {
     const err = new Error(`Exista deja un utilaj cu codul "${code}".`);
@@ -57,13 +57,19 @@ export async function createMachine({ code, name, type, location, status, metada
   }
 
   const [machine] = await db(TABLE)
-    .insert({ code, name, type, location: location || null, status: status || 'active', metadata: metadata || {}, ...extractTenant(req) })
+    .insert({
+      code, name, type, location: location || null, status: status || 'active',
+      metadata: metadata || {},
+      controller_type: controller_type || null,
+      controller_model: controller_model || null,
+      ...extractTenant(req),
+    })
     .returning('*');
 
   return machine;
 }
 
-export async function updateMachine(id, { name, type, location, status, metadata }) {
+export async function updateMachine(id, { name, type, location, status, metadata, controller_type, controller_model }) {
   const machine = await db(TABLE).where({ id }).first();
   if (!machine) {
     const err = new Error('Utilajul nu a fost gasit.');
@@ -78,6 +84,8 @@ export async function updateMachine(id, { name, type, location, status, metadata
   if (location !== undefined) updates.location = location;
   if (status !== undefined) updates.status = status;
   if (metadata !== undefined) updates.metadata = metadata;
+  if (controller_type !== undefined) updates.controller_type = controller_type;
+  if (controller_model !== undefined) updates.controller_model = controller_model;
 
   const [updated] = await db(TABLE).where({ id }).update(updates).returning('*');
   return updated;

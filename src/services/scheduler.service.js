@@ -117,7 +117,7 @@ async function runAlgorithm(runId, configId, periodStart, periodEnd) {
       });
     } else {
       for (const op of bomOps.sort((a, b) => (a.sequence || 0) - (b.sequence || 0))) {
-        const piecesPerHour = op.pieces_per_hour || tenantConfig.defaultPiecesPerHour || 10;
+        const piecesPerHour = op.pieces_per_hour || (op.cycle_time_seconds > 0 ? (3600 / op.cycle_time_seconds) * (op.nr_cavities || 1) : null) || tenantConfig.defaultPiecesPerHour || 10;
         toSchedule.push({
           order,
           operation: op,

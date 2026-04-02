@@ -265,6 +265,48 @@ export async function updateComponent(id, data) {
   return comp;
 }
 
+// ─── Product Tree (recursive BOM) ────────────────────────────────────────────
+
+export async function getProductTree(productId, depth = 0, maxDepth = 10) {
+  if (depth > maxDepth) return null;
+  const product = await db('bom.products').where('id', productId).first();
+  if (!product) return null;
+
+  const operations = await db('bom.operations')
+    .leftJoin('machines.machines as m', 'bom.operations.machine_id', 'm.id')
+    .where('bom.operations.product_id', productId)
+    .orderBy('sequence')
+    .select('bom.operations.*', 'm.code as machine_code', 'm.name as machine_name');
+
+  const components = await db('bom.assembly_components')
+    .where('parent_product_id', productId);
+
+  const materials = await db('bom.materials')
+    .where('product_id', productId);
+
+  // Recursively get child product trees
+  const children = [];
+  for (const comp of components) {
+    if (comp.component_product_id) {
+      const childTree = await getProductTree(comp.component_product_id, depth + 1, maxDepth);
+      children.push({
+        ...comp,
+        childProduct: childTree,
+      });
+    } else {
+      children.push(comp);
+    }
+  }
+
+  return {
+    ...product,
+    operations,
+    materials,
+    children,
+    depth,
+  };
+}
+
 // ─── Cost Rates ───────────────────────────────────────────────────────────────
 
 export async function listCostRates() {

@@ -111,6 +111,14 @@ export const putComponent = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+export const getProductTree = async (req, res, next) => {
+  try {
+    const tree = await svc.getProductTree(req.params.id);
+    if (!tree) return res.status(404).json({ message: 'Produs negasit.' });
+    res.json(tree);
+  } catch (e) { next(e); }
+};
+
 export const getCostRates = async (req, res, next) => {
   try {
     res.json(await svc.listCostRates());

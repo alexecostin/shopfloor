@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Trash2, ChevronRight, Cpu, Layers, Wrench, Clock, Euro, UserPlus, UserMinus } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronRight, Cpu, Layers, Wrench, Clock, Euro, UserPlus, UserMinus, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
 import { useLookup } from '../hooks/useLookup'
 
 function LookupSelect({ lookupType, value, onChange, placeholder }) {
@@ -31,6 +31,8 @@ function MachineModal({ machine, onClose }) {
     code: machine?.code ?? '', name: machine?.name ?? '',
     type: machine?.type ?? '', location: machine?.location ?? '',
     status: machine?.status ?? 'active',
+    controller_type: machine?.controller_type ?? '',
+    controller_model: machine?.controller_model ?? '',
   })
   const mutation = useMutation({
     mutationFn: (data) => isEdit ? api.put(`/machines/${machine.id}`, data) : api.post('/machines', data),
@@ -74,6 +76,19 @@ function MachineModal({ machine, onClose }) {
               <option value="maintenance">In mentenanta</option>
               <option value="inactive">Inactiv</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tip controler</label>
+            <select className="input" value={form.controller_type} onChange={e => setForm({ ...form, controller_type: e.target.value })}>
+              <option value="">Fara / Necunoscut</option>
+              {['Fanuc', 'Siemens', 'Heidenhain', 'Mazatrol', 'Fagor', 'Haas', 'Mitsubishi', 'Altul'].map(ct => (
+                <option key={ct} value={ct}>{ct}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Model controler</label>
+            <input className="input" placeholder='Ex: Fanuc 0i-TF, Sinumerik 840D' value={form.controller_model} onChange={e => setForm({ ...form, controller_model: e.target.value })} />
           </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
@@ -152,8 +167,11 @@ function MachineCard({ machine, onClose, isAdmin }) {
   const [addCap, setAddCap] = useState(false)
   const [planTab, setPlanTab] = useState(false)
   const [opsTab, setOpsTab] = useState(false)
+  const [certTab, setCertTab] = useState(false)
   const [showAssignOp, setShowAssignOp] = useState(false)
   const [assignUserId, setAssignUserId] = useState('')
+  const [showAddCert, setShowAddCert] = useState(false)
+  const [certForm, setCertForm] = useState({ userId: '', machineType: machine.type || '', controllerType: machine.controller_type || '', level: 'operator', certifiedDate: '', expiryDate: '' })
 
   const { data: detail } = useQuery({
     queryKey: ['machine-detail', machine.id],
@@ -169,7 +187,25 @@ function MachineCard({ machine, onClose, isAdmin }) {
   const { data: usersData } = useQuery({
     queryKey: ['users-for-assign'],
     queryFn: () => api.get('/auth/users').then(r => r.data?.data || r.data || []),
-    enabled: opsTab && isAdmin,
+    enabled: (opsTab || certTab) && isAdmin,
+  })
+
+  const { data: certifiedOps } = useQuery({
+    queryKey: ['certified-operators', machine.id],
+    queryFn: () => api.get(`/machines/${machine.id}/certified-operators`).then(r => r.data),
+    enabled: certTab,
+  })
+
+  const addCertMut = useMutation({
+    mutationFn: (data) => api.post(`/machines/${machine.id}/certifications`, data),
+    onSuccess: () => { qc.invalidateQueries(['certified-operators', machine.id]); toast.success('Certificare adaugata.'); setShowAddCert(false) },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare la adaugare certificare.'),
+  })
+
+  const removeCertMut = useMutation({
+    mutationFn: (id) => api.delete(`/machines/certifications/${id}`),
+    onSuccess: () => { qc.invalidateQueries(['certified-operators', machine.id]); toast.success('Certificare dezactivata.') },
+    onError: (e) => toast.error(e.response?.data?.message || 'Eroare.'),
   })
 
   const assignOperator = useMutation({
@@ -213,9 +249,14 @@ function MachineCard({ machine, onClose, isAdmin }) {
             </div>
             <button onClick={onClose} className="btn-secondary text-xs">Inchide</button>
           </div>
-          <div className="flex gap-4 mt-3 text-xs text-slate-400">
+          <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
             {machine.type && <span className="flex items-center gap-1"><Wrench size={11} />{machine.type}</span>}
             {machine.location && <span>{machine.location}</span>}
+            {machine.controller_type && (
+              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+                {machine.controller_type}{machine.controller_model ? ` — ${machine.controller_model}` : ''}
+              </span>
+            )}
             <span className={`px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[machine.status]}`}>
               {machine.status === 'active' ? 'Activ' : machine.status === 'maintenance' ? 'Mentenanta' : 'Inactiv'}
             </span>
@@ -228,13 +269,13 @@ function MachineCard({ machine, onClose, isAdmin }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-100">
-          {[['cap', 'Operatii posibile'], ['ops', 'Operatori'], ['plan', 'Planificare']].map(([t, l]) => {
-            const active = (t === 'cap' && !planTab && !opsTab) || (t === 'ops' && opsTab) || (t === 'plan' && planTab)
+        <div className="flex border-b border-slate-100 overflow-x-auto">
+          {[['cap', 'Operatii posibile'], ['ops', 'Operatori'], ['cert', 'Certificari'], ['plan', 'Planificare']].map(([t, l]) => {
+            const active = (t === 'cap' && !planTab && !opsTab && !certTab) || (t === 'ops' && opsTab) || (t === 'plan' && planTab) || (t === 'cert' && certTab)
             return (
               <button key={t}
-                onClick={() => { setPlanTab(t === 'plan'); setOpsTab(t === 'ops') }}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                onClick={() => { setPlanTab(t === 'plan'); setOpsTab(t === 'ops'); setCertTab(t === 'cert') }}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
                   ${active
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-slate-400 hover:text-slate-600'}`}
@@ -246,7 +287,7 @@ function MachineCard({ machine, onClose, isAdmin }) {
         </div>
 
         <div className="p-5">
-          {!planTab && !opsTab && (
+          {!planTab && !opsTab && !certTab && (
             <>
               {/* Capabilities */}
               <div className="flex items-center justify-between mb-3">
@@ -358,6 +399,90 @@ function MachineCard({ machine, onClose, isAdmin }) {
                       {assignOperator.isPending ? 'Se aloca...' : 'Aloca'}
                     </button>
                     <button onClick={() => setShowAssignOp(false)} className="btn-secondary text-xs">Anuleaza</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {certTab && (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-slate-700">Operatori certificati</h4>
+                {isAdmin && (
+                  <button onClick={() => setShowAddCert(true)} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+                    <Plus size={12} /> Adauga certificare
+                  </button>
+                )}
+              </div>
+
+              {(!certifiedOps || certifiedOps.length === 0) && (
+                <p className="text-slate-400 text-sm text-center py-4">
+                  Niciun operator certificat pe acest tip de masina.
+                </p>
+              )}
+
+              <div className="space-y-2">
+                {(certifiedOps || []).map((op, i) => {
+                  const isExpired = op.expiry_date && new Date(op.expiry_date) < new Date()
+                  const isExpiring = op.expiry_date && !isExpired && new Date(op.expiry_date) < new Date(Date.now() + 30 * 86400000)
+                  const levelColors = {
+                    operator: 'bg-blue-100 text-blue-700',
+                    senior: 'bg-green-100 text-green-700',
+                    trainer: 'bg-purple-100 text-purple-700',
+                    exception: 'bg-amber-100 text-amber-700',
+                  }
+                  return (
+                    <div key={op.id + '-' + i} className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-800 text-sm">{op.full_name}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${levelColors[op.certification_level] || 'bg-slate-100 text-slate-600'}`}>
+                            {op.certification_level}
+                          </span>
+                          {isExpired && <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Expirat</span>}
+                          {isExpiring && <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Expira curand</span>}
+                          {!isExpired && !isExpiring && op.expiry_date && <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">Valid</span>}
+                        </div>
+                        <div className="flex gap-3 mt-0.5 text-xs text-slate-400">
+                          {op.email && <span>{op.email}</span>}
+                          {op.expiry_date && <span>Expira: {new Date(op.expiry_date).toLocaleDateString('ro-RO')}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {showAddCert && (
+                <div className="mt-3 bg-blue-50 rounded-lg p-3 border border-blue-100">
+                  <h5 className="text-xs font-medium text-blue-700 mb-2">Adauga certificare</h5>
+                  <div className="space-y-2">
+                    <select className="input text-sm w-full" value={certForm.userId} onChange={e => setCertForm({ ...certForm, userId: e.target.value })}>
+                      <option value="">Selecteaza operator...</option>
+                      {(usersData || []).map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                      ))}
+                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select className="input text-sm" value={certForm.level} onChange={e => setCertForm({ ...certForm, level: e.target.value })}>
+                        <option value="operator">Operator</option>
+                        <option value="senior">Senior</option>
+                        <option value="trainer">Trainer</option>
+                      </select>
+                      <input className="input text-sm" type="date" placeholder="Data certificare" value={certForm.certifiedDate} onChange={e => setCertForm({ ...certForm, certifiedDate: e.target.value })} />
+                    </div>
+                    <input className="input text-sm w-full" type="date" placeholder="Data expirare (optional)" value={certForm.expiryDate} onChange={e => setCertForm({ ...certForm, expiryDate: e.target.value })} />
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setShowAddCert(false)} className="btn-secondary text-xs">Anuleaza</button>
+                      <button
+                        onClick={() => addCertMut.mutate(certForm)}
+                        disabled={!certForm.userId || !certForm.certifiedDate || addCertMut.isPending}
+                        className="btn-primary text-xs"
+                      >
+                        {addCertMut.isPending ? 'Se adauga...' : 'Adauga'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -496,6 +621,7 @@ export default function MachinesPage() {
                   <th className="text-left px-4 py-3 font-medium text-slate-600">Denumire</th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Tip</th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 hidden lg:table-cell">Locatie</th>
+                  <th className="text-left px-4 py-3 font-medium text-slate-600 hidden lg:table-cell">Controler</th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -507,6 +633,13 @@ export default function MachinesPage() {
                     <td className="px-4 py-3 text-slate-700">{m.name}</td>
                     <td className="px-4 py-3 text-slate-500 hidden md:table-cell">{m.type}</td>
                     <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{m.location || '—'}</td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {m.controller_type ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700" title={m.controller_model || ''}>
+                          {m.controller_type}
+                        </span>
+                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[m.status]}`}>
                         {m.status === 'active' ? 'Activ' : m.status === 'maintenance' ? 'Mentenanta' : 'Inactiv'}
@@ -526,7 +659,7 @@ export default function MachinesPage() {
                   </tr>
                 ))}
                 {data?.data?.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center">
+                  <tr><td colSpan={7} className="px-4 py-12 text-center">
                     <Cpu size={40} className="mx-auto text-slate-300 mb-3" />
                     <p className="text-slate-500 font-medium">Niciun utilaj</p>
                     <p className="text-slate-400 text-sm mt-1">Apasa butonul "Adauga" pentru a inregistra primul utilaj.</p>
