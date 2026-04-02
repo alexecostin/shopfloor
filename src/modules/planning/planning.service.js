@@ -284,7 +284,7 @@ export async function getAllocationContext(machineId) {
       const totalQty = order.quantity || 0;
       const remaining = Math.max(0, totalQty - alreadyAllocated);
 
-      if (remaining > 0) {
+      {
         results.push({
           operation: op,
           order: {

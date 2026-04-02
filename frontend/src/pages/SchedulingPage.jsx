@@ -354,7 +354,7 @@ function ConfigsTab() {
 function RunsTab() {
   const qc = useQueryClient()
   const [showGenerate, setShowGenerate] = useState(false)
-  const [genForm, setGenForm] = useState({ configId: '', masterPlanId: '' })
+  const [genForm, setGenForm] = useState({ configId: '', masterPlanId: '', periodStart: new Date().toISOString().split('T')[0], periodEnd: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0] })
   const [selectedRun, setSelectedRun] = useState(null)
 
   const { data: runs = [], isLoading } = useQuery({
@@ -469,6 +469,16 @@ function RunsTab() {
                   {configs.map(c => <option key={c.id} value={c.id}>{c.name} {c.is_default ? '(implicit)' : ''}</option>)}
                 </select>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Data start *</label>
+                  <input type="date" className="input" value={genForm.periodStart || ''} onChange={e => setGenForm({ ...genForm, periodStart: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Data sfarsit *</label>
+                  <input type="date" className="input" value={genForm.periodEnd || ''} onChange={e => setGenForm({ ...genForm, periodEnd: e.target.value })} />
+                </div>
+              </div>
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Master Plan (optional)</label>
                 <select className="input" value={genForm.masterPlanId} onChange={e => setGenForm({ ...genForm, masterPlanId: e.target.value })}>
@@ -483,7 +493,7 @@ function RunsTab() {
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setShowGenerate(false)} className="btn-secondary">Anuleaza</button>
-              <button onClick={() => generateMut.mutate({ ...genForm, masterPlanId: genForm.masterPlanId || undefined })} disabled={!genForm.configId || generateMut.isPending} className="btn-primary">
+              <button onClick={() => generateMut.mutate({ ...genForm, masterPlanId: genForm.masterPlanId || undefined })} disabled={!genForm.configId || !genForm.periodStart || !genForm.periodEnd || generateMut.isPending} className="btn-primary">
                 {generateMut.isPending ? 'Se genereaza...' : 'Genereaza'}
               </button>
             </div>

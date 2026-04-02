@@ -64,6 +64,7 @@ function InstructionModal({ onClose, editItem }) {
     queryFn: () => api.get('/bom/products', { params: { limit: 500 } }).then(r => r.data),
   })
   const products = productsData?.data || []
+  const selectedProduct = products.find(p => p.id === form.productId) || null
 
   // Load operations filtered by product
   const { data: operationsData } = useQuery({
@@ -72,6 +73,7 @@ function InstructionModal({ onClose, editItem }) {
     enabled: !!form.productId,
   })
   const operations = operationsData || []
+  const selectedOperation = operations.find(o => o.id === form.operationId) || null
 
   // Reset operation when product changes and fetch related documents
   useEffect(() => {
@@ -132,7 +134,16 @@ function InstructionModal({ onClose, editItem }) {
         </div>
 
         <div className="space-y-3">
-          <input className="input" placeholder="Titlu *" value={form.title} onChange={f('title')} />
+          {/* Title: auto-generated from product + operation, or manual */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Titlu instructiune *</label>
+            {(selectedProduct || selectedOperation) && (
+              <p className="text-xs text-slate-400 mb-1">
+                Sugestie: Instructiune pentru{selectedProduct ? ` ${selectedProduct.reference || selectedProduct.name}` : ''}{selectedOperation ? ` — ${selectedOperation.operation_name}` : ''}
+              </p>
+            )}
+            <input className="input" placeholder="Titlu *" value={form.title} onChange={f('title')} />
+          </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Comanda de lucru</label>
@@ -164,27 +175,38 @@ function InstructionModal({ onClose, editItem }) {
             </div>
           </div>
 
-          {productDocs.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <label className="block text-xs font-medium text-amber-800 mb-2">Desene tehnice asociate produsului</label>
-              <div className="flex flex-wrap gap-2">
-                {productDocs.map(doc => (
-                  <a key={doc.id} href={doc.file_url || doc.url || '#'} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline bg-white rounded px-2 py-1 border border-amber-200">
-                    <ExternalLink size={12} /> {doc.title || doc.file_name || doc.name || 'Document'}
-                  </a>
-                ))}
-              </div>
+          {/* Documents for selected product */}
+          {form.productId && (
+            <div className={`rounded-lg p-3 border ${productDocs.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+              <label className="block text-xs font-medium text-amber-800 mb-2">
+                Documente disponibile pentru {selectedProduct ? (selectedProduct.reference || selectedProduct.name) : 'produs'}:
+              </label>
+              {productDocs.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {productDocs.map(doc => (
+                    <a key={doc.id} href={doc.file_url || doc.url || '#'} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline bg-white rounded px-2 py-1 border border-amber-200">
+                      <ExternalLink size={12} /> {doc.title || doc.file_name || doc.name || 'Document'}
+                      <span className="text-[10px] bg-blue-100 text-blue-600 px-1 rounded ml-1">Vizualizeaza</span>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">Niciun document asociat acestui produs.</p>
+              )}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <input className="input" placeholder="Tip masina (optional)" value={form.machineType} onChange={f('machineType')} />
-            <input className="input" placeholder="Revizie" type="number" value={form.revision} onChange={e => setForm({ ...form, revision: +e.target.value || 1 })} />
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Revizie</label>
+              <input className="input" placeholder="Revizie" type="number" value={form.revision} onChange={e => setForm({ ...form, revision: +e.target.value || 1 })} />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-600 self-end pb-2">
+              <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} />
+              Activ
+            </label>
           </div>
-
-          <input className="input" placeholder="URL desen tehnic (optional)" value={form.drawingUrl} onChange={f('drawingUrl')} />
-          <input className="input" placeholder="URL video (optional)" value={form.videoUrl} onChange={f('videoUrl')} />
 
           {/* Parameters */}
           <div>
@@ -238,11 +260,6 @@ function InstructionModal({ onClose, editItem }) {
           </div>
 
           <textarea className="input min-h-[60px]" placeholder="Note (optional)" value={form.notes} onChange={f('notes')} />
-
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} />
-            Activ
-          </label>
         </div>
 
         <div className="flex justify-end gap-2 mt-4">
@@ -292,34 +309,36 @@ export default function WorkInstructionsPage() {
                 <th className="pb-2 pr-4">Titlu</th>
                 <th className="pb-2 pr-4">Produs</th>
                 <th className="pb-2 pr-4">Operatie</th>
-                <th className="pb-2 pr-4">Tip masina</th>
-                <th className="pb-2 pr-4">Revizie</th>
-                <th className="pb-2 pr-4">Activ</th>
+                <th className="pb-2 pr-4 hidden md:table-cell">Parametri</th>
+                <th className="pb-2 pr-4 hidden md:table-cell">Puncte atentie</th>
+                <th className="pb-2 pr-4">Status</th>
                 <th className="pb-2">Actiuni</th>
               </tr>
             </thead>
             <tbody>
-              {items.map(item => (
-                <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-2 pr-4 font-medium text-slate-800">{item.title}</td>
-                  <td className="py-2 pr-4 text-slate-600">{item.product_name || '-'}</td>
-                  <td className="py-2 pr-4 text-slate-600">{item.operation_name || '-'}</td>
-                  <td className="py-2 pr-4 text-slate-600">{item.machine_type || '-'}</td>
-                  <td className="py-2 pr-4">
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">v{item.revision}</span>
-                  </td>
-                  <td className="py-2 pr-4">
-                    {item.is_active
-                      ? <CheckCircle size={16} className="text-green-500" />
-                      : <XCircle size={16} className="text-red-400" />}
-                  </td>
-                  <td className="py-2">
-                    <button onClick={() => openEdit(item)} className="text-blue-600 hover:underline text-xs flex items-center gap-1">
-                      <Pencil size={14} /> Editeaza
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {items.map(item => {
+                const params = typeof item.parameters === 'string' ? JSON.parse(item.parameters || '[]') : (item.parameters || [])
+                const attn = typeof item.attention_points === 'string' ? JSON.parse(item.attention_points || '[]') : (item.attention_points || [])
+                return (
+                  <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-2 pr-4 font-medium text-slate-800">{item.title}</td>
+                    <td className="py-2 pr-4 text-slate-600">{item.product_name || '-'}</td>
+                    <td className="py-2 pr-4 text-slate-600">{item.operation_name || '-'}</td>
+                    <td className="py-2 pr-4 text-slate-500 text-xs hidden md:table-cell">{params.length} parametri</td>
+                    <td className="py-2 pr-4 text-slate-500 text-xs hidden md:table-cell">{attn.length} puncte</td>
+                    <td className="py-2 pr-4">
+                      {item.is_active
+                        ? <span className="inline-flex items-center gap-1 text-xs text-green-600"><CheckCircle size={13} /> Activ</span>
+                        : <span className="inline-flex items-center gap-1 text-xs text-red-400"><XCircle size={13} /> Inactiv</span>}
+                    </td>
+                    <td className="py-2">
+                      <button onClick={() => openEdit(item)} className="text-blue-600 hover:underline text-xs flex items-center gap-1">
+                        <Pencil size={14} /> Editeaza
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
               {items.length === 0 && (
                 <tr><td colSpan={7} className="py-8 text-center text-slate-400">Nicio instructiune de lucru.</td></tr>
               )}

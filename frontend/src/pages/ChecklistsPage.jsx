@@ -85,6 +85,28 @@ function CompleteModal({ template, machines, onClose }) {
   )
 }
 
+const CHECKLIST_PLACEHOLDERS = [
+  'Verifica nivelul uleiului pe masina',
+  'Verifica fixarea piesei in mandrina',
+  'Curata zona de lucru',
+  'Verifica sculele (uzura, fixare)',
+  'Verifica presiunea aerului comprimat',
+  'Inspecteaza vizual prima piesa',
+]
+
+const CHECK_TYPE_OPTIONS = [
+  { value: 'yes_no', label: 'Da / Nu' },
+  { value: 'ok_nok', label: 'OK / NOK' },
+  { value: 'numeric', label: 'Valoare numerica' },
+  { value: 'text', label: 'Text liber' },
+]
+
+const TRIGGER_OPTIONS = [
+  { value: 'shift_start', label: 'La inceput de tura' },
+  { value: 'product_change', label: 'La schimbare produs' },
+  { value: 'inspection', label: 'La inspectie periodica' },
+]
+
 function TemplateModal({ onClose, editTemplate }) {
   const qc = useQueryClient()
   const isEdit = !!editTemplate
@@ -94,9 +116,13 @@ function TemplateModal({ onClose, editTemplate }) {
           name: editTemplate.name || '',
           description: editTemplate.description || '',
           category: editTemplate.category || '',
-          items: (editTemplate.items || []).map(i => typeof i === 'string' ? i : i.text || ''),
+          trigger: editTemplate.trigger || 'shift_start',
+          items: (editTemplate.items || []).map(i => {
+            if (typeof i === 'string') return { text: i, checkType: 'yes_no' }
+            return { text: i.text || '', checkType: i.check_type || i.checkType || 'yes_no' }
+          }),
         }
-      : { name: '', description: '', category: '', items: [''] }
+      : { name: '', description: '', category: '', trigger: 'shift_start', items: [{ text: '', checkType: 'yes_no' }] }
   )
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
@@ -117,14 +143,23 @@ function TemplateModal({ onClose, editTemplate }) {
     },
   })
 
-  const addItem = () => setForm({ ...form, items: [...form.items, ''] })
+  const addItem = () => setForm({ ...form, items: [...form.items, { text: '', checkType: 'yes_no' }] })
   const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) })
-  const updateItem = (idx, val) => setForm({ ...form, items: form.items.map((it, i) => i === idx ? val : it) })
+  const updateItem = (idx, field, val) => setForm({
+    ...form,
+    items: form.items.map((it, i) => i === idx ? { ...it, [field]: val } : it)
+  })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza template' : 'Template nou'}</h3>
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <h3 className="font-semibold text-slate-800 mb-2">{isEdit ? 'Editeaza checklist' : 'Checklist nou'}</h3>
+
+        {/* Explanation */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+          Un checklist este o lista de verificari pe care operatorul le completeaza la inceputul turului, la schimbarea produsului sau periodic. Definiti punctele pe care operatorul trebuie sa le verifice.
+        </div>
+
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Nume checklist *</label>
@@ -134,27 +169,44 @@ function TemplateModal({ onClose, editTemplate }) {
             <label className="block text-xs font-medium text-slate-600 mb-1">Descriere</label>
             <input className="input" placeholder="Descrierea scopului checklistului" value={form.description} onChange={f('description')} />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Categorie</label>
-            <input className="input" placeholder="Ex: Calitate, Siguranta, Mentenanta" value={form.category} onChange={f('category')} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Categorie</label>
+              <input className="input" placeholder="Ex: Calitate, Siguranta, Mentenanta" value={form.category} onChange={f('category')} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Cand se completeaza</label>
+              <select className="input" value={form.trigger} onChange={f('trigger')}>
+                {TRIGGER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-slate-700">Puncte de verificare</label>
+              <label className="text-sm font-medium text-slate-700">Ce trebuie sa verifice operatorul?</label>
               <button type="button" onClick={addItem} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"><Plus size={12} /> Adauga punct</button>
             </div>
             <div className="space-y-2">
               {form.items.map((item, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <input
-                    className="input flex-1"
-                    placeholder={`Punct ${idx + 1} *`}
-                    value={item}
-                    onChange={e => updateItem(idx, e.target.value)}
-                  />
+                <div key={idx} className="flex gap-2 items-start p-2 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex-1 space-y-1">
+                    <input
+                      className="input w-full"
+                      placeholder={CHECKLIST_PLACEHOLDERS[idx % CHECKLIST_PLACEHOLDERS.length]}
+                      value={item.text}
+                      onChange={e => updateItem(idx, 'text', e.target.value)}
+                    />
+                    <select
+                      className="input w-full text-xs"
+                      value={item.checkType}
+                      onChange={e => updateItem(idx, 'checkType', e.target.value)}
+                    >
+                      {CHECK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
                   {form.items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(idx)} className="text-slate-400 hover:text-red-500"><X size={16} /></button>
+                    <button type="button" onClick={() => removeItem(idx)} className="text-slate-400 hover:text-red-500 mt-2"><X size={16} /></button>
                   )}
                 </div>
               ))}
@@ -168,9 +220,10 @@ function TemplateModal({ onClose, editTemplate }) {
               name: form.name,
               description: form.description,
               category: form.category,
-              items: form.items.filter(i => i.trim()),
+              trigger: form.trigger,
+              items: form.items.filter(i => i.text.trim()).map(i => typeof i === 'object' ? i.text : i),
             })}
-            disabled={mutation.isPending || !form.name || form.items.filter(i => i.trim()).length === 0}
+            disabled={mutation.isPending || !form.name || form.items.filter(i => i.text.trim()).length === 0}
             className="btn-primary"
           >
             {mutation.isPending ? 'Se salveaza...' : isEdit ? 'Salveaza' : 'Creeaza'}
@@ -244,6 +297,7 @@ export default function ChecklistsPage() {
   const { user } = useAuth()
   const [createModal, setCreateModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [selectedCompletion, setSelectedCompletion] = useState(null)
   const [tab, setTab] = useState('templates')
   const isManager = ['admin', 'production_manager'].includes(user?.role)
 
@@ -278,25 +332,29 @@ export default function ChecklistsPage() {
             <strong>Scopul acestei pagini:</strong> Definiti sabloane de verificare pe care operatorii le completeaza la inceputul turelor, la schimbarea produsului sau la inspectii periodice. Fiecare sablon contine o lista de puncte de verificat.
           </div>
           {isLoading && <p className="text-slate-400 text-sm">Se incarca...</p>}
-          {templates?.map(t => (
-            <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
-              <div className="cursor-pointer flex-1" onClick={() => setSelectedTemplate(t)}>
-                <h4 className="font-medium text-slate-800">{t.name}</h4>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {t.items?.length ?? 0} puncte
-                  {t.machine_type && ` • ${t.machine_type}`}
-                  {!t.is_active && <span className="ml-2 text-red-400">inactiv</span>}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                {t.is_active && (
+          {templates?.map(t => {
+            const triggerLabel = TRIGGER_OPTIONS.find(o => o.value === t.trigger)?.label || '—'
+            return (
+              <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+                <div className="cursor-pointer flex-1" onClick={() => setSelectedTemplate(t)}>
+                  <h4 className="font-medium text-slate-800">{t.name}</h4>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {t.category && (
+                      <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{t.category}</span>
+                    )}
+                    <span className="text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{t.items?.length ?? 0} puncte</span>
+                    <span className="text-[11px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">{triggerLabel}</span>
+                    {!t.is_active && <span className="text-[11px] bg-red-50 text-red-400 px-2 py-0.5 rounded-full">Inactiv</span>}
+                  </div>
+                </div>
+                <div className="flex gap-2">
                   <button onClick={() => setSelectedTemplate(t)} className="btn-secondary text-xs">
                     Detalii
                   </button>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           {templates?.length === 0 && <p className="text-slate-400 text-sm">Niciun template.</p>}
         </div>
       )}
@@ -310,25 +368,29 @@ export default function ChecklistsPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Tura</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Completat de</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Masina</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600 hidden md:table-cell">Tura</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Rezultat</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600 hidden lg:table-cell">Data</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {completions?.data?.map(c => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-slate-700">{c.shift || '—'}</td>
+                <tr key={c.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedCompletion(selectedCompletion === c.id ? null : c.id)}>
+                  <td className="px-4 py-3 text-slate-700">{c.completed_by_name || c.user_name || '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs hidden md:table-cell">{c.machine_code || c.machine_name || '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs hidden md:table-cell">{c.shift || '—'}</td>
                   <td className="px-4 py-3">
                     {c.all_ok
-                      ? <span className="flex items-center gap-1 text-green-600 text-xs"><CheckCircle size={13} /> OK</span>
-                      : <span className="flex items-center gap-1 text-red-500 text-xs"><XCircle size={13} /> Probleme</span>
+                      ? <span className="flex items-center gap-1 text-green-600 text-xs"><CheckCircle size={13} /> Toate OK</span>
+                      : <span className="flex items-center gap-1 text-red-500 text-xs"><XCircle size={13} /> Probleme gasite</span>
                     }
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{new Date(c.completed_at).toLocaleString('ro-RO')}</td>
                 </tr>
               ))}
-              {completions?.data?.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">Nicio completare.</td></tr>}
+              {completions?.data?.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nicio completare.</td></tr>}
             </tbody>
           </table>
         </div>

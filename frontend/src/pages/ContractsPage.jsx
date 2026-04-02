@@ -38,18 +38,38 @@ function StatusBadge({ status, cfg }) {
 
 /* ── Create Contract Modal ────────────────────────────────────────────────── */
 
+function calcDeliveriesInPeriod(frequency, startDate, endDate) {
+  if (!startDate || !endDate) return 0
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const diffMs = end - start
+  if (diffMs <= 0) return 0
+  const diffWeeks = diffMs / (7 * 24 * 60 * 60 * 1000)
+  if (frequency === 'weekly') return Math.ceil(diffWeeks)
+  if (frequency === 'biweekly') return Math.ceil(diffWeeks / 2)
+  // monthly
+  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+  return Math.max(months, 1)
+}
+
 function CreateContractModal({ onClose }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
     clientId: null,
     contractNumber: '',
-    products: [{ productReference: '', productName: '', quantityPerDelivery: '', unitPrice: '' }],
+    products: [{ productId: null, productReference: '', productName: '', quantityPerDelivery: '', deliveryFrequency: 'monthly', unitPrice: '' }],
     currency: 'RON',
-    deliveryFrequency: 'monthly',
     startDate: '',
     endDate: '',
     notes: '',
   })
+
+  // Fetch BOM products for SearchableSelect
+  const { data: bomProductsData } = useQuery({
+    queryKey: ['bom-products-contract'],
+    queryFn: () => api.get('/bom/products', { params: { limit: 500 } }).then(r => r.data),
+  })
+  const bomProducts = bomProductsData?.data || []
 
   const mutation = useMutation({
     mutationFn: (data) => api.post('/contracts', data),
@@ -67,7 +87,7 @@ function CreateContractModal({ onClose }) {
 
   const addProduct = () => setForm(f => ({
     ...f,
-    products: [...f.products, { productReference: '', productName: '', quantityPerDelivery: '', unitPrice: '' }]
+    products: [...f.products, { productId: null, productReference: '', productName: '', quantityPerDelivery: '', deliveryFrequency: 'monthly', unitPrice: '' }]
   }))
 
   const removeProduct = (idx) => setForm(f => ({
@@ -80,10 +100,34 @@ function CreateContractModal({ onClose }) {
     products: f.products.map((p, i) => i === idx ? { ...p, [field]: value } : p)
   }))
 
+  const selectBomProduct = (idx, productId) => {
+    const bp = bomProducts.find(p => p.id === productId)
+    if (bp) {
+      updateProduct(idx, 'productId', bp.id)
+      updateProduct(idx, 'productReference', bp.reference || '')
+      // Need to set both at once to avoid race
+      setForm(f => ({
+        ...f,
+        products: f.products.map((p, i) => i === idx ? { ...p, productId: bp.id, productReference: bp.reference || '', productName: bp.name || '' } : p)
+      }))
+    } else {
+      setForm(f => ({
+        ...f,
+        products: f.products.map((p, i) => i === idx ? { ...p, productId: null, productReference: '', productName: '' } : p)
+      }))
+    }
+  }
+
   // Calculate totals from products
   const totalQtyPerDelivery = form.products.reduce((sum, p) => sum + (Number(p.quantityPerDelivery) || 0), 0)
-  // Estimate total based on frequency and period
-  const hasProducts = form.products.some(p => p.productReference || p.productName)
+
+  // Auto-calculate total contract quantity per product
+  const autoTotalQty = form.products.reduce((sum, p) => {
+    const qty = Number(p.quantityPerDelivery) || 0
+    const deliveries = calcDeliveriesInPeriod(p.deliveryFrequency, form.startDate, form.endDate)
+    return sum + (qty * deliveries)
+  }, 0)
+
   const canSave = form.clientId && form.contractNumber && totalQtyPerDelivery > 0 && form.startDate && form.endDate
 
   return (
@@ -121,69 +165,7 @@ function CreateContractModal({ onClose }) {
             </div>
           </div>
 
-          {/* Multi-product section */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-slate-700">Produse in contract</label>
-              <button type="button" onClick={addProduct} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
-                <Plus size={12} /> Adauga produs
-              </button>
-            </div>
-            <div className="space-y-2">
-              {form.products.map((p, idx) => (
-                <div key={idx} className="flex items-end gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-0.5">Referinta produs</label>
-                    <input className="input w-full" placeholder="Ex: AXL-500" value={p.productReference}
-                      onChange={e => updateProduct(idx, 'productReference', e.target.value)} />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-0.5">Denumire produs</label>
-                    <input className="input w-full" placeholder="Ex: Ax principal" value={p.productName}
-                      onChange={e => updateProduct(idx, 'productName', e.target.value)} />
-                  </div>
-                  <div className="w-28">
-                    <label className="block text-xs text-slate-400 mb-0.5">Cant./livrare *</label>
-                    <input className="input w-full" type="number" placeholder="1000" value={p.quantityPerDelivery}
-                      onChange={e => updateProduct(idx, 'quantityPerDelivery', e.target.value)} />
-                  </div>
-                  <div className="w-28">
-                    <label className="block text-xs text-slate-400 mb-0.5">Pret unitar</label>
-                    <input className="input w-full" type="number" step="0.01" placeholder="45.00" value={p.unitPrice}
-                      onChange={e => updateProduct(idx, 'unitPrice', e.target.value)} />
-                  </div>
-                  {form.products.length > 1 && (
-                    <button type="button" onClick={() => removeProduct(idx)} className="text-slate-400 hover:text-red-500 mb-1">
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {totalQtyPerDelivery > 0 && (
-              <p className="text-xs text-slate-500 mt-2">
-                Total cantitate per livrare: <strong>{totalQtyPerDelivery.toLocaleString('ro-RO')}</strong>
-                {form.products.length > 1 && ` (${form.products.length} produse)`}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Frecventa livrare *</label>
-              <select className="input" value={form.deliveryFrequency} onChange={e => setForm(f => ({ ...f, deliveryFrequency: e.target.value }))}>
-                <option value="weekly">Saptamanal</option>
-                <option value="biweekly">Bisaptamanal</option>
-                <option value="monthly">Lunar</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Cantitate totala contract</label>
-              <input className="input" type="number" placeholder="Ex: 12000 (total pe durata contractului)"
-                value={form.totalQuantity || ''}
-                onChange={e => setForm(f => ({ ...f, totalQuantity: e.target.value }))} />
-            </div>
-          </div>
+          {/* Dates first — needed for auto-calc */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Data start *</label>
@@ -196,6 +178,101 @@ function CreateContractModal({ onClose }) {
                 onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
             </div>
           </div>
+
+          {/* Multi-product section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-700">Produse in contract</label>
+              <button type="button" onClick={addProduct} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+                <Plus size={12} /> Adauga produs
+              </button>
+            </div>
+            <div className="space-y-2">
+              {form.products.map((p, idx) => {
+                const deliveries = calcDeliveriesInPeriod(p.deliveryFrequency, form.startDate, form.endDate)
+                const prodTotal = (Number(p.quantityPerDelivery) || 0) * deliveries
+                return (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="block text-xs text-slate-400 mb-0.5">Produs (selecteaza din BOM sau scrie manual)</label>
+                        <select
+                          className="input w-full"
+                          value={p.productId || ''}
+                          onChange={e => selectBomProduct(idx, e.target.value || null)}
+                        >
+                          <option value="">-- Selecteaza produs sau scrie manual --</option>
+                          {bomProducts.map(bp => (
+                            <option key={bp.id} value={bp.id}>{bp.reference} - {bp.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {form.products.length > 1 && (
+                        <button type="button" onClick={() => removeProduct(idx)} className="text-slate-400 hover:text-red-500 mb-1">
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                    {!p.productId && (
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-xs text-slate-400 mb-0.5">Referinta produs</label>
+                          <input className="input w-full" placeholder="Ex: AXL-500" value={p.productReference}
+                            onChange={e => updateProduct(idx, 'productReference', e.target.value)} />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs text-slate-400 mb-0.5">Denumire produs</label>
+                          <input className="input w-full" placeholder="Ex: Ax principal" value={p.productName}
+                            onChange={e => updateProduct(idx, 'productName', e.target.value)} />
+                        </div>
+                      </div>
+                    )}
+                    {p.productId && (
+                      <p className="text-xs text-slate-500">
+                        <span className="font-mono text-blue-500">{p.productReference}</span> — {p.productName}
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <div className="w-28">
+                        <label className="block text-xs text-slate-400 mb-0.5">Cant./livrare *</label>
+                        <input className="input w-full" type="number" placeholder="1000" value={p.quantityPerDelivery}
+                          onChange={e => updateProduct(idx, 'quantityPerDelivery', e.target.value)} />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs text-slate-400 mb-0.5">Frecventa</label>
+                        <select className="input w-full" value={p.deliveryFrequency}
+                          onChange={e => updateProduct(idx, 'deliveryFrequency', e.target.value)}>
+                          <option value="weekly">Saptamanal</option>
+                          <option value="biweekly">Bisaptamanal</option>
+                          <option value="monthly">Lunar</option>
+                        </select>
+                      </div>
+                      <div className="w-28">
+                        <label className="block text-xs text-slate-400 mb-0.5">Pret unitar</label>
+                        <input className="input w-full" type="number" step="0.01" placeholder="45.00" value={p.unitPrice}
+                          onChange={e => updateProduct(idx, 'unitPrice', e.target.value)} />
+                      </div>
+                    </div>
+                    {deliveries > 0 && Number(p.quantityPerDelivery) > 0 && (
+                      <p className="text-[11px] text-slate-400">
+                        {deliveries} livrari x {Number(p.quantityPerDelivery).toLocaleString('ro-RO')} = <strong className="text-slate-600">{prodTotal.toLocaleString('ro-RO')} total</strong>
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {/* Auto-calculated total */}
+            {autoTotalQty > 0 && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-700">
+                  Cantitate totala contract (auto-calculat): <strong>{autoTotalQty.toLocaleString('ro-RO')}</strong>
+                  {form.products.length > 1 && ` (${form.products.length} produse)`}
+                </p>
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs text-slate-500 mb-1">Note</label>
             <textarea className="input" rows={2} value={form.notes}
@@ -205,22 +282,29 @@ function CreateContractModal({ onClose }) {
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
           <button
-            onClick={() => mutation.mutate({
-              ...form,
-              totalQuantity: Number(form.totalQuantity) || totalQtyPerDelivery * 12,
-              quantityPerDelivery: totalQtyPerDelivery,
-              products: form.products
-                .filter(p => p.productReference || p.productName)
-                .map(p => ({
-                  ...p,
-                  quantityPerDelivery: Number(p.quantityPerDelivery) || 0,
-                  unitPrice: p.unitPrice ? Number(p.unitPrice) : null,
-                })),
-              // Backward compat for single product
-              productReference: form.products.length === 1 ? form.products[0].productReference : undefined,
-              productName: form.products.length === 1 ? form.products[0].productName : undefined,
-              unitPrice: form.products.length === 1 && form.products[0].unitPrice ? Number(form.products[0].unitPrice) : null,
-            })}
+            onClick={() => {
+              // Use first product's frequency as contract-level fallback
+              const mainFreq = form.products[0]?.deliveryFrequency || 'monthly'
+              mutation.mutate({
+                ...form,
+                deliveryFrequency: mainFreq,
+                totalQuantity: autoTotalQty || totalQtyPerDelivery * 12,
+                quantityPerDelivery: totalQtyPerDelivery,
+                products: form.products
+                  .filter(p => p.productReference || p.productName || p.productId)
+                  .map(p => ({
+                    productReference: p.productReference,
+                    productName: p.productName,
+                    quantityPerDelivery: Number(p.quantityPerDelivery) || 0,
+                    deliveryFrequency: p.deliveryFrequency,
+                    unitPrice: p.unitPrice ? Number(p.unitPrice) : null,
+                  })),
+                // Backward compat for single product
+                productReference: form.products.length === 1 ? form.products[0].productReference : undefined,
+                productName: form.products.length === 1 ? form.products[0].productName : undefined,
+                unitPrice: form.products.length === 1 && form.products[0].unitPrice ? Number(form.products[0].unitPrice) : null,
+              })
+            }}
             disabled={mutation.isPending || !canSave}
             className="btn-primary"
           >

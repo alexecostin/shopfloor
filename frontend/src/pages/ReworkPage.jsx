@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
-import { RefreshCw, Play, CheckCircle, XCircle, ChevronDown, X } from 'lucide-react'
+import { RefreshCw, Play, CheckCircle, XCircle, ChevronDown, X, Info } from 'lucide-react'
 
 const STATUS_LABELS = {
   pending: 'In asteptare',
@@ -29,11 +29,15 @@ function StatCard({ label, value, suffix = '', color = 'text-slate-800' }) {
   )
 }
 
-function DetailModal({ item, machines, onClose }) {
+function DetailModal({ item, machines, workOrders, onClose }) {
   const qc = useQueryClient()
   const [targetMachineId, setTargetMachineId] = useState(item.target_machine_id || '')
   const [completeForm, setCompleteForm] = useState({ reworkGood: 0, reworkScrapped: 0, notes: item.notes || '' })
   const [showComplete, setShowComplete] = useState(false)
+
+  // Resolve order number from work orders list
+  const resolvedOrder = workOrders?.find(wo => wo.id === item.order_id)
+  const srcMachine = machines?.find(m => m.id === item.source_machine_id)
 
   const updateMutation = useMutation({
     mutationFn: (data) => api.put(`/production/rework/${item.id}`, data),
@@ -89,7 +93,10 @@ function DetailModal({ item, machines, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-lg p-3">
               <p className="text-xs text-slate-400">Produs</p>
-              <p className="font-medium text-slate-800">{item.product_name || '—'}</p>
+              {item.product_name
+                ? <p className="font-medium text-slate-800">{item.product_name}</p>
+                : <p className="font-medium text-orange-500">Necunoscut</p>
+              }
               {item.product_reference && <p className="text-xs text-slate-500">{item.product_reference}</p>}
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
@@ -97,6 +104,31 @@ function DetailModal({ item, machines, onClose }) {
               <p className="font-medium text-slate-800">{item.rework_qty}</p>
             </div>
           </div>
+
+          {/* Context: order, client, source machine, operator */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Comanda</p>
+              <p className="font-medium text-slate-800">
+                {item.order_number || resolvedOrder?.work_order_number || resolvedOrder?.order_number || (item.order_id ? item.order_id.slice(0, 8) + '...' : '—')}
+              </p>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Client</p>
+              <p className="font-medium text-slate-800">{item.client_name || resolvedOrder?.client_name || '—'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Masina sursa</p>
+              <p className="font-medium text-slate-800">{srcMachine ? `${srcMachine.code} — ${srcMachine.name}` : (item.source_machine_id ? item.source_machine_id.slice(0, 8) : '—')}</p>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Raportat de</p>
+              <p className="font-medium text-slate-800">{item.reported_by_name || item.operator_name || '—'}</p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-lg p-3">
               <p className="text-xs text-slate-400">Motiv</p>
@@ -246,7 +278,21 @@ export default function ReworkPage() {
     queryFn: () => api.get('/machines').then(r => r.data.data),
   })
 
+  // Fetch work orders to resolve order_id to order_number/client_name
+  const { data: workOrdersData } = useQuery({
+    queryKey: ['work-orders-lookup'],
+    queryFn: () => api.get('/work-orders', { params: { limit: 500 } }).then(r => r.data),
+  })
+  const workOrders = workOrdersData?.data || []
+
   const items = queue?.data || []
+
+  // Build a lookup map for order_id -> work order info
+  const orderMap = useMemo(() => {
+    const map = {}
+    workOrders.forEach(wo => { map[wo.id] = wo })
+    return map
+  }, [workOrders])
 
   return (
     <div className="space-y-4">
@@ -254,6 +300,12 @@ export default function ReworkPage() {
         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
           <RefreshCw size={20} /> Reprelucrare
         </h2>
+      </div>
+
+      {/* Explanatory note */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2 text-sm text-amber-800">
+        <Info size={16} className="shrink-0 mt-0.5" />
+        <p>Piese trimise la reprelucrare dupa raportarea productiei. Asigna masina target si porneste reprelucrarea.</p>
       </div>
 
       {/* Stats */}
@@ -304,6 +356,8 @@ export default function ReworkPage() {
             {items.map(item => {
               const srcMachine = machines?.find(m => m.id === item.source_machine_id)
               const tgtMachine = machines?.find(m => m.id === item.target_machine_id)
+              const wo = item.order_id ? orderMap[item.order_id] : null
+              const displayOrderNumber = item.order_number || wo?.work_order_number || wo?.order_number || null
               return (
                 <tr
                   key={item.id}
@@ -311,11 +365,13 @@ export default function ReworkPage() {
                   onClick={() => setSelectedItem(item)}
                 >
                   <td className="px-4 py-3 text-slate-700">
-                    {item.product_name || '—'}
-                    {item.product_reference && <span className="text-xs text-slate-400 ml-1">({item.product_reference})</span>}
+                    {item.product_name
+                      ? <>{item.product_name}{item.product_reference && <span className="text-xs text-slate-400 ml-1">({item.product_reference})</span>}</>
+                      : <span className="text-orange-500 font-medium">Necunoscut</span>
+                    }
                   </td>
                   <td className="px-4 py-3 text-slate-500 text-xs font-mono hidden md:table-cell">
-                    {item.order_id ? item.order_id.slice(0, 8) + '...' : '—'}
+                    {displayOrderNumber || (item.order_id ? item.order_id.slice(0, 8) + '...' : '—')}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-slate-800">{item.rework_qty}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs hidden lg:table-cell">{item.rework_reason || '—'}</td>
@@ -348,6 +404,7 @@ export default function ReworkPage() {
         <DetailModal
           item={selectedItem}
           machines={machines}
+          workOrders={workOrders}
           onClose={() => setSelectedItem(null)}
         />
       )}
