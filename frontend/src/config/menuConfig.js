@@ -56,7 +56,6 @@ const ALL_MENUS = {
     { id: 'pm-machines', label: 'Utilaje', icon: 'Cpu', path: '/machines', module: 'machines', permission: null },
     { id: 'pm-reports', label: 'Rapoarte P/R/R', icon: 'BarChart2', path: '/reports', module: 'reports_advanced', permission: null },
     { id: 'pm-scheduling', label: 'Planificare Auto', icon: 'Zap', path: '/scheduling', module: 'planning', permission: null },
-    { id: 'pm-setup', label: 'Timpi Setup', icon: 'Timer', path: '/setup', module: 'setup_times', permission: null },
   ],
 
   director: [
@@ -143,7 +142,6 @@ const ALL_MENUS = {
       children: [
         { id: 'adm-plan-manual', label: 'Planuri & Gantt', path: '/planning', permission: null },
         { id: 'adm-plan-auto', label: 'Planificare Auto', path: '/scheduling', permission: null },
-        { id: 'adm-plan-setup', label: 'Timpi Setup', path: '/setup', permission: null },
         { id: 'adm-plan-bom', label: 'BOM / MBOM', path: '/bom', permission: null },
       ]
     },
