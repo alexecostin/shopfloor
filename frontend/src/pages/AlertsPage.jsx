@@ -13,17 +13,143 @@ const SEV_COLORS = {
 const RULE_TYPES = [
   { value: 'stock_low', label: 'Stoc scazut' },
   { value: 'oee_low', label: 'OEE scazut' },
+  { value: 'maintenance_approaching', label: 'Mentenanta se apropie' },
   { value: 'maintenance_overdue', label: 'Mentenanta depasita' },
+  { value: 'calibration_expiring', label: 'Calibrare expira' },
+  { value: 'tool_cycles', label: 'Cicluri scula' },
+  { value: 'order_at_risk', label: 'Comanda la risc' },
+  { value: 'price_increase', label: 'Crestere pret' },
   { value: 'custom', label: 'Custom' },
 ]
 
 const CHANNEL_ICONS = { email: Mail, sms: Smartphone, push: BellRing }
 
+function RuleConditionFields({ ruleType, conditions, onChange }) {
+  const upd = (key, val) => onChange({ ...conditions, [key]: val })
+
+  const { data: machinesData } = useQuery({
+    queryKey: ['machines-for-alerts'],
+    queryFn: () => api.get('/machines').then(r => r.data?.data || r.data || []),
+    enabled: ruleType === 'oee_low' || ruleType === 'maintenance_approaching',
+    staleTime: 60000,
+  })
+  const { data: itemsData } = useQuery({
+    queryKey: ['items-for-alerts'],
+    queryFn: () => api.get('/inventory/items', { params: { limit: 200 } }).then(r => r.data?.data || r.data || []),
+    enabled: ruleType === 'stock_low',
+    staleTime: 60000,
+  })
+
+  const machines = machinesData || []
+  const items = itemsData || []
+
+  switch (ruleType) {
+    case 'stock_low':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Articol</label>
+            <select className="input w-full" value={conditions.item_id || ''} onChange={e => upd('item_id', e.target.value || null)}>
+              <option value="">Toate articolele</option>
+              {items.map(it => <option key={it.id} value={it.id}>{it.code} - {it.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Prag (% sub stoc minim)</label>
+            <input className="input w-full" type="number" min={0} max={100} placeholder="ex: 20" value={conditions.threshold_pct || ''} onChange={e => upd('threshold_pct', e.target.value)} />
+            <p className="text-xs text-slate-400 mt-1">Alerta cand stocul scade sub acest procent din stocul minim. Lasa gol pentru a alerta la stoc minim exact.</p>
+          </div>
+        </div>
+      )
+    case 'oee_low':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Masina</label>
+            <select className="input w-full" value={conditions.machine_id || ''} onChange={e => upd('machine_id', e.target.value || null)}>
+              <option value="">Toate masinile</option>
+              {machines.map(m => <option key={m.id} value={m.id}>{m.code} - {m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Prag OEE (%)</label>
+            <input className="input w-full" type="number" min={0} max={100} placeholder="ex: 60" value={conditions.oee_threshold || ''} onChange={e => upd('oee_threshold', e.target.value)} />
+            <p className="text-xs text-slate-400 mt-1">Alerta cand OEE-ul scade sub acest procent.</p>
+          </div>
+        </div>
+      )
+    case 'maintenance_approaching':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Masina</label>
+            <select className="input w-full" value={conditions.machine_id || ''} onChange={e => upd('machine_id', e.target.value || null)}>
+              <option value="">Toate masinile</option>
+              {machines.map(m => <option key={m.id} value={m.id}>{m.code} - {m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Zile inainte</label>
+            <input className="input w-full" type="number" min={1} max={365} placeholder="ex: 14" value={conditions.days_before || ''} onChange={e => upd('days_before', e.target.value)} />
+            <p className="text-xs text-slate-400 mt-1">Alerta cu cate zile inainte de scadenta mentenantei.</p>
+          </div>
+        </div>
+      )
+    case 'calibration_expiring':
+      return (
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Zile inainte</label>
+          <input className="input w-full" type="number" min={1} max={365} placeholder="ex: 30" value={conditions.days_before || ''} onChange={e => upd('days_before', e.target.value)} />
+          <p className="text-xs text-slate-400 mt-1">Alerta cu cate zile inainte de expirarea calibrarii.</p>
+        </div>
+      )
+    case 'tool_cycles':
+      return (
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Procent viata (%)</label>
+          <input className="input w-full" type="number" min={1} max={100} placeholder="ex: 90" value={conditions.life_pct || ''} onChange={e => upd('life_pct', e.target.value)} />
+          <p className="text-xs text-slate-400 mt-1">Alerta cand scula atinge acest procent din ciclurile de viata (ex: 90% = 90% din intervalul de mentenanta).</p>
+        </div>
+      )
+    case 'order_at_risk':
+      return (
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Zile inactive</label>
+          <input className="input w-full" type="number" min={1} max={365} placeholder="ex: 7" value={conditions.inactive_days || ''} onChange={e => upd('inactive_days', e.target.value)} />
+          <p className="text-xs text-slate-400 mt-1">Alerta cand o comanda activa nu are rapoarte de productie de atatea zile.</p>
+        </div>
+      )
+    case 'price_increase':
+      return (
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Procent crestere (%)</label>
+          <input className="input w-full" type="number" min={1} max={1000} placeholder="ex: 10" value={conditions.increase_pct || ''} onChange={e => upd('increase_pct', e.target.value)} />
+          <p className="text-xs text-slate-400 mt-1">Alerta cand pretul unui articol creste cu mai mult de acest procent fata de pretul anterior.</p>
+        </div>
+      )
+    case 'custom':
+      return (
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Descriere conditie</label>
+          <textarea className="input w-full" rows={3} placeholder="Descrieti conditia care trebuie verificata..." value={conditions.description || ''} onChange={e => upd('description', e.target.value)} />
+        </div>
+      )
+    case 'maintenance_overdue':
+      return (
+        <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700">
+          Aceasta regula alerta automat cand o mentenanta planificata a depasit data scadenta. Nu necesita parametri suplimentari.
+        </div>
+      )
+    default:
+      return null
+  }
+}
+
 function CreateRuleModal({ onClose }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
     name: '', description: '', rule_type: 'stock_low', severity: 'warning', is_active: true,
-    condition: { threshold: '' },
+    conditions: {},
   })
   const f = k => e => setForm({ ...form, [k]: e.target.value })
 
@@ -34,14 +160,32 @@ function CreateRuleModal({ onClose }) {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
 
+  // When rule_type changes, reset conditions
+  const handleTypeChange = (e) => {
+    setForm({ ...form, rule_type: e.target.value, conditions: {} })
+  }
+
+  // Build the payload: store conditions in the "parameters" JSONB column
+  const buildPayload = () => {
+    const { conditions: cond, ...rest } = form
+    // Clean up empty string values
+    const cleanConditions = {}
+    for (const [k, v] of Object.entries(cond)) {
+      if (v !== '' && v !== null && v !== undefined) {
+        cleanConditions[k] = isNaN(Number(v)) ? v : Number(v)
+      }
+    }
+    return { ...rest, parameters: cleanConditions, condition: cleanConditions }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-slate-800">Regula noua</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
@@ -58,7 +202,7 @@ function CreateRuleModal({ onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 mb-1 block">Tip regula</label>
-              <select className="input w-full" value={form.rule_type} onChange={f('rule_type')}>
+              <select className="input w-full" value={form.rule_type} onChange={handleTypeChange}>
                 {RULE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
@@ -71,11 +215,17 @@ function CreateRuleModal({ onClose }) {
               </select>
             </div>
           </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Prag (threshold)</label>
-            <input className="input w-full" type="number" placeholder="ex: 10" value={form.condition.threshold}
-              onChange={e => setForm({ ...form, condition: { ...form.condition, threshold: e.target.value } })} />
+
+          {/* Type-specific condition fields */}
+          <div className="border-t border-slate-100 pt-3">
+            <label className="block text-xs font-medium text-slate-600 mb-2">Parametri regula</label>
+            <RuleConditionFields
+              ruleType={form.rule_type}
+              conditions={form.conditions}
+              onChange={c => setForm({ ...form, conditions: c })}
+            />
           </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
             <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} />
             Activa
@@ -84,7 +234,7 @@ function CreateRuleModal({ onClose }) {
         <div className="flex gap-2 mt-5 justify-end">
           <button onClick={onClose} className="btn-secondary">Anuleaza</button>
           <button
-            onClick={() => mut.mutate({ ...form, condition: { threshold: form.condition.threshold ? Number(form.condition.threshold) : undefined } })}
+            onClick={() => mut.mutate(buildPayload())}
             disabled={mut.isPending || !form.name}
             className="btn-primary"
           >
@@ -113,7 +263,7 @@ function RuleDetailModal({ rule, onClose }) {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
@@ -125,12 +275,14 @@ function RuleDetailModal({ rule, onClose }) {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
 
   const channels = channelsData?.data || channelsData || []
+  const params = rule.parameters || rule.condition || {}
+  const ruleTypeDef = RULE_TYPES.find(t => t.value === rule.rule_type)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -143,13 +295,28 @@ function RuleDetailModal({ rule, onClose }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
 
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 flex-wrap">
           <span className={`text-xs px-2 py-0.5 rounded-full ${SEV_COLORS[rule.severity] || 'bg-slate-100'}`}>{rule.severity}</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{rule.rule_type}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{ruleTypeDef?.label || rule.rule_type}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${rule.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
             {rule.is_active ? 'Activa' : 'Inactiva'}
           </span>
         </div>
+
+        {/* Show parameters */}
+        {Object.keys(params).length > 0 && (
+          <div className="mb-4">
+            <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Parametri</h4>
+            <div className="bg-slate-50 rounded-lg p-3 space-y-1">
+              {Object.entries(params).map(([k, v]) => (
+                <div key={k} className="flex justify-between text-sm">
+                  <span className="text-slate-500">{k.replace(/_/g, ' ')}</span>
+                  <span className="text-slate-800 font-medium">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Canale de notificare</h4>
         {chLoading ? <p className="text-slate-400 text-sm">Se incarca...</p> : (
@@ -230,7 +397,7 @@ export default function AlertsPage() {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
@@ -242,7 +409,7 @@ export default function AlertsPage() {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
@@ -254,7 +421,7 @@ export default function AlertsPage() {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
@@ -266,7 +433,7 @@ export default function AlertsPage() {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
@@ -278,7 +445,7 @@ export default function AlertsPage() {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
       else if (msg.includes('not-null') || msg.includes('violates')) toast.error('Campuri obligatorii necompletate. Verificati formularul.');
-      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge — exista date asociate.');
+      else if (msg.includes('foreign key')) toast.error('Nu se poate sterge -- exista date asociate.');
       else toast.error(msg || 'A aparut o eroare. Incercati din nou.');
     },
   })
@@ -290,6 +457,8 @@ export default function AlertsPage() {
   alerts.forEach(a => { if (counts[a.severity] !== undefined) counts[a.severity]++ })
 
   const totalCount = alertCount?.count ?? alertCount?.data?.count ?? null
+
+  const ruleTypeLabel = (code) => RULE_TYPES.find(t => t.value === code)?.label || code
 
   const tabCls = t => t === tab
     ? 'px-4 py-2 text-sm font-medium bg-white border-b-2 border-blue-600 text-blue-600'
@@ -401,7 +570,7 @@ export default function AlertsPage() {
                         <p className="font-medium text-slate-800">{r.name}</p>
                         {r.description && <p className="text-xs text-slate-400">{r.description}</p>}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{r.rule_type}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{ruleTypeLabel(r.rule_type)}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${SEV_COLORS[r.severity] || 'bg-slate-100'}`}>{r.severity}</span>
                       </td>

@@ -1,5 +1,8 @@
 import db from '../../config/db.js';
 
+// Remove restrictive CHECK constraint on leave_type — types come from lookups
+db.raw("ALTER TABLE auth.leave_requests DROP CONSTRAINT IF EXISTS leave_requests_leave_type_check").catch(() => {});
+
 // Skill Levels
 export const listSkillLevels = () => db('auth.skill_level_definitions').orderBy('rank');
 export const createSkillLevel = async data => {
