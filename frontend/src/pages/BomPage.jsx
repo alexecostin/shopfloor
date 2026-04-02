@@ -585,8 +585,13 @@ function OperationDetailDrawer({ operation, machines, productId, allOperations, 
   }
 
   function handleSave() {
+    // transfer_type has a CHECK constraint: only 'direct' or 'through_stock' are valid
+    const transferType = form.transfer_type && ['direct', 'through_stock'].includes(form.transfer_type)
+      ? form.transfer_type
+      : null
     saveMut.mutate({
       ...form,
+      transfer_type: transferType,
       cycle_time_seconds: form.cycle_time_seconds ? Number(form.cycle_time_seconds) : null,
       setup_time_minutes: form.setup_time_minutes ? Number(form.setup_time_minutes) : null,
       nr_cavities: form.nr_cavities ? Number(form.nr_cavities) : 1,
@@ -1195,9 +1200,20 @@ function MaterialsPanel({ components }) {
 
       {/* Bottom buttons */}
       <div className="p-3 border-t border-slate-200 space-y-2">
-        <button className="btn-secondary text-xs w-full flex items-center justify-center gap-1">
-          <Plus size={12} /> Material nou
-        </button>
+        <SearchableSelect
+          endpoint="/inventory/items"
+          labelField="name"
+          valueField="id"
+          placeholder="Cauta material in inventar..."
+          value={null}
+          onChange={(id, item) => {
+            if (item) {
+              toast.success(`Material "${item.name || item.code}" selectat. Trage-l pe o operatie.`)
+            }
+          }}
+          allowCreate={false}
+          className="text-xs"
+        />
       </div>
     </div>
   )
@@ -1727,6 +1743,15 @@ function MBOMVisualEditor({ orderId, onBack }) {
     )
   }
 
+  const createProductMut = useMutation({
+    mutationFn: (body) => api.post('/bom/products', body),
+    onSuccess: () => {
+      toast.success('Produs creat in catalogul BOM. Se reincarca...')
+      refetch()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Eroare la creare produs.'),
+  })
+
   if (!product) {
     return (
       <div className="space-y-4">
@@ -1740,7 +1765,20 @@ function MBOMVisualEditor({ orderId, onBack }) {
           <p className="text-sm text-amber-600">
             Produsul <strong>{order.product_reference || order.product_name}</strong> nu exista in catalogul BOM.
           </p>
-          <button onClick={onBack} className="btn-secondary mt-4">Inapoi la comenzi</button>
+          <div className="flex gap-2 mt-4 justify-center">
+            <button onClick={onBack} className="btn-secondary">Inapoi la comenzi</button>
+            <button
+              onClick={() => createProductMut.mutate({
+                reference: order.product_reference || order.product_name || 'REF-' + Date.now(),
+                name: order.product_name || order.product_reference || 'Produs nou',
+                productType: 'semi_finished',
+              })}
+              disabled={createProductMut.isPending}
+              className="btn-primary flex items-center gap-1"
+            >
+              <Plus size={14} /> {createProductMut.isPending ? 'Se creeaza...' : 'Creeaza produsul in catalog BOM'}
+            </button>
+          </div>
         </div>
       </div>
     )

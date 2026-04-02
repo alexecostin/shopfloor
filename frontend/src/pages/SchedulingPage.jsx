@@ -4,6 +4,7 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Edit2, Zap, Play, Eye, CheckCircle, Star, BarChart3, Calendar, Settings, FlaskConical, X } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 
 // --------------- Gantt helpers ---------------
 function GanttBar({ operation, dayStart, totalDays }) {
@@ -186,8 +187,8 @@ function ConfigsTab() {
     const payload = {
       name: form.name,
       description: form.description,
-      priorities: form.priorities,
-      constraints: form.constraints,
+      priorities: typeof form.priorities === 'string' ? form.priorities : JSON.stringify(form.priorities),
+      constraints: typeof form.constraints === 'string' ? form.constraints : JSON.stringify(form.constraints),
     }
     if (editing) updateMut.mutate({ id: editing.id, ...payload })
     else createMut.mutate(payload)
@@ -366,6 +367,14 @@ function RunsTab() {
     queryFn: () => api.get('/scheduling/configs').then(r => r.data),
   })
 
+  const { data: masterPlans = [] } = useQuery({
+    queryKey: ['master-plans-for-scheduling'],
+    queryFn: () => api.get('/planning/master-plans', { params: { limit: 100 } }).then(r => {
+      const d = r.data
+      return Array.isArray(d) ? d : (d?.data || [])
+    }),
+  })
+
   const generateMut = useMutation({
     mutationFn: data => api.post('/scheduling/generate', data),
     onSuccess: () => { qc.invalidateQueries(['scheduling-runs']); setShowGenerate(false); toast.success('Planificare generata cu succes.') },
@@ -461,13 +470,20 @@ function RunsTab() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Master Plan ID *</label>
-                <input className="input" placeholder="ID-ul planului principal" value={genForm.masterPlanId} onChange={e => setGenForm({ ...genForm, masterPlanId: e.target.value })} />
+                <label className="text-xs text-slate-500 mb-1 block">Master Plan (optional)</label>
+                <select className="input" value={genForm.masterPlanId} onChange={e => setGenForm({ ...genForm, masterPlanId: e.target.value })}>
+                  <option value="">Fara plan master (genereaza automat)</option>
+                  {masterPlans.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.start_date?.split('T')[0]} - {p.end_date?.split('T')[0]})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setShowGenerate(false)} className="btn-secondary">Anuleaza</button>
-              <button onClick={() => generateMut.mutate(genForm)} disabled={!genForm.configId || !genForm.masterPlanId || generateMut.isPending} className="btn-primary">
+              <button onClick={() => generateMut.mutate({ ...genForm, masterPlanId: genForm.masterPlanId || undefined })} disabled={!genForm.configId || generateMut.isPending} className="btn-primary">
                 {generateMut.isPending ? 'Se genereaza...' : 'Genereaza'}
               </button>
             </div>
@@ -792,23 +808,30 @@ function SimulationsTab() {
               {/* Perioada */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Perioada de la</label>
+                  <label className="text-xs text-slate-500 mb-1 block">Perioada de la *</label>
                   <input type="date" className="input" value={simForm.period_from} onChange={e => setSimForm({ ...simForm, period_from: e.target.value })} />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Perioada pana la</label>
+                  <label className="text-xs text-slate-500 mb-1 block">Perioada pana la *</label>
                   <input type="date" className="input" value={simForm.period_to} onChange={e => setSimForm({ ...simForm, period_to: e.target.value })} />
                 </div>
               </div>
+              {(!simForm.period_from || !simForm.period_to) && (
+                <p className="text-xs text-amber-600">Perioada este obligatorie pentru simulare.</p>
+              )}
             </div>
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setShowCreate(false)} className="btn-secondary">Anuleaza</button>
               <button onClick={() => {
+                if (!simForm.period_from || !simForm.period_to) {
+                  toast.error('Perioada (de la / pana la) este obligatorie.')
+                  return
+                }
                 const payload = {
                   name: simForm.name,
                   description: simForm.description,
-                  periodStart: simForm.period_from || undefined,
-                  periodEnd: simForm.period_to || undefined,
+                  periodStart: simForm.period_from,
+                  periodEnd: simForm.period_to,
                   constraintsModified: {
                     disabled_machines: simForm.disabled_machines,
                     urgent_orders: simForm.urgent_orders,
@@ -816,7 +839,7 @@ function SimulationsTab() {
                   },
                 }
                 createMut.mutate(payload)
-              }} disabled={!simForm.name || createMut.isPending} className="btn-primary">
+              }} disabled={!simForm.name || !simForm.period_from || !simForm.period_to || createMut.isPending} className="btn-primary">
                 {createMut.isPending ? 'Se creeaza...' : 'Creeaza'}
               </button>
             </div>
@@ -845,6 +868,12 @@ function formatParamValue(key, val) {
   if (val === false) return 'Nu'
   if (Array.isArray(val)) return val.length > 0 ? val.join(', ') : 'Niciunul'
   if (val === null || val === undefined || val === '') return '-'
+  if (typeof val === 'object') {
+    // Render object properties as readable lines
+    const entries = Object.entries(val)
+    if (entries.length === 0) return '-'
+    return entries.map(([k, v]) => `${PARAM_LABELS[k] || k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(', ')
+  }
   return String(val)
 }
 
@@ -892,13 +921,35 @@ function SimulationDetailModal({ sim, onClose, onApply, onDelete, applyPending }
           {comparison && (
             <div>
               <div className="text-xs text-slate-500 font-medium mb-2">Comparatie cu planificarea curenta</div>
-              <div className="grid grid-cols-2 gap-3">
-                {Object.entries(comparison).map(([key, val]) => (
-                  <div key={key} className="bg-slate-50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500">{PARAM_LABELS[key] || key}</div>
-                    <div className="font-medium text-slate-800 text-sm">{formatParamValue(key, val)}</div>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {Object.entries(comparison).map(([key, val]) => {
+                  // If val is an object with sub-properties (e.g. base, simulation), render as a card with details
+                  if (val && typeof val === 'object' && !Array.isArray(val)) {
+                    return (
+                      <div key={key} className="bg-slate-50 rounded-lg p-3">
+                        <div className="text-xs text-slate-500 font-medium mb-1.5">{PARAM_LABELS[key] || key}</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(val).map(([subKey, subVal]) => (
+                            <div key={subKey} className="bg-white rounded p-2 border border-slate-100">
+                              <div className="text-[10px] text-slate-400">{PARAM_LABELS[subKey] || subKey}</div>
+                              <div className="text-sm font-medium text-slate-800">
+                                {typeof subVal === 'object' && subVal !== null
+                                  ? Object.entries(subVal).map(([k, v]) => `${k}: ${v}`).join(' | ')
+                                  : formatParamValue(subKey, subVal)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={key} className="bg-slate-50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500">{PARAM_LABELS[key] || key}</div>
+                      <div className="font-medium text-slate-800 text-sm">{formatParamValue(key, val)}</div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { Plus, Building2, ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Building2, ChevronRight, Pencil, Trash2, FileText, ShoppingCart, Truck, Package, Star } from 'lucide-react'
 
 const TYPE_LABELS = { client: 'Client', supplier: 'Furnizor', prospect: 'Prospect', both: 'Client & Furnizor' }
 const TYPE_COLORS = {
@@ -26,7 +26,6 @@ function getCompanyTypes(company) {
 function CompanyModal({ onClose, editCompany }) {
   const qc = useQueryClient()
   const isEdit = !!editCompany
-  // company_types is a JSONB array in DB, e.g. ["client","supplier"]
   const initType = isEdit
     ? (Array.isArray(editCompany.company_types)
         ? editCompany.company_types[0]
@@ -38,24 +37,31 @@ function CompanyModal({ onClose, editCompany }) {
           name: editCompany.name || '',
           companyType: initType,
           fiscalCode: editCompany.fiscal_code || '',
+          tradeRegister: editCompany.trade_register || '',
           city: editCompany.city || '',
+          address: editCompany.address || '',
           phone: editCompany.phone || '',
           email: editCompany.email || '',
+          website: editCompany.website || '',
+          paymentTermsDays: editCompany.payment_terms_days || '',
         }
-      : { name: '', companyType: 'client', fiscalCode: '', city: '', phone: '', email: '' }
+      : { name: '', companyType: 'client', fiscalCode: '', tradeRegister: '', city: '', address: '', phone: '', email: '', website: '', paymentTermsDays: '' }
   )
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
   const mutation = useMutation({
     mutationFn: (data) => {
-      // Backend expects companyTypes (plural, array) — convert from singular select
       const payload = {
         name: data.name,
         companyTypes: [data.companyType],
         fiscalCode: data.fiscalCode,
+        tradeRegister: data.tradeRegister,
         city: data.city,
+        address: data.address,
         phone: data.phone,
         email: data.email,
+        website: data.website,
+        paymentTermsDays: data.paymentTermsDays ? Number(data.paymentTermsDays) : null,
       }
       return isEdit ? api.put(`/companies/${editCompany.id}`, payload) : api.post('/companies', payload)
     },
@@ -76,36 +82,52 @@ function CompanyModal({ onClose, editCompany }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-semibold text-slate-800 mb-4">{isEdit ? 'Editeaza companie' : 'Companie noua'}</h3>
         <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Denumire companie *</label>
-            <input className="input" placeholder="Ex: SC Exemplu SRL" value={form.name} onChange={f('name')} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Tip companie - selecteaza relatia cu aceasta companie</label>
-            <select className="input" value={form.companyType} onChange={f('companyType')}>
-              {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
           <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Denumire companie *</label>
+              <input className="input" placeholder="Ex: SC Exemplu SRL" value={form.name} onChange={f('name')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Tip companie</label>
+              <select className="input" value={form.companyType} onChange={f('companyType')}>
+                {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">CIF / Cod fiscal</label>
               <input className="input" placeholder="Ex: RO12345678" value={form.fiscalCode} onChange={f('fiscalCode')} />
             </div>
             <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Reg. comertului</label>
+              <input className="input" placeholder="Ex: J12/345/2020" value={form.tradeRegister} onChange={f('tradeRegister')} />
+            </div>
+            <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Oras</label>
               <input className="input" placeholder="Ex: Cluj-Napoca" value={form.city} onChange={f('city')} />
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Telefon</label>
-            <input className="input" placeholder="Ex: 0740123456" value={form.phone} onChange={f('phone')} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Email</label>
-            <input className="input" type="email" placeholder="Ex: contact@exemplu.ro" value={form.email} onChange={f('email')} />
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Adresa</label>
+              <input className="input" placeholder="Ex: Str. Fabricii nr. 10" value={form.address} onChange={f('address')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Telefon</label>
+              <input className="input" placeholder="Ex: 0740123456" value={form.phone} onChange={f('phone')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Email</label>
+              <input className="input" type="email" placeholder="Ex: contact@exemplu.ro" value={form.email} onChange={f('email')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Website</label>
+              <input className="input" placeholder="Ex: www.exemplu.ro" value={form.website} onChange={f('website')} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Termen plata (zile)</label>
+              <input className="input" type="number" placeholder="Ex: 30" value={form.paymentTermsDays} onChange={f('paymentTermsDays')} />
+            </div>
           </div>
         </div>
         <div className="flex gap-2 mt-5 justify-end">
@@ -128,6 +150,7 @@ function EditContactModal({ contact, onClose }) {
   const [form, setForm] = useState({
     fullName: contact.full_name || '',
     role: contact.role || '',
+    department: contact.department || '',
     phone: contact.phone || '',
     email: contact.email || '',
   })
@@ -159,6 +182,10 @@ function EditContactModal({ contact, onClose }) {
             <input className="input" placeholder="Ex: Director achizitii" value={form.role} onChange={f('role')} />
           </div>
           <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Departament</label>
+            <input className="input" placeholder="Ex: Achizitii" value={form.department} onChange={f('department')} />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
             <input className="input" placeholder="Ex: 0740123456" value={form.phone} onChange={f('phone')} />
           </div>
@@ -178,13 +205,215 @@ function EditContactModal({ contact, onClose }) {
   )
 }
 
+/* ---- Client-specific sections ---- */
+function ClientSection({ companyId }) {
+  const { data: workOrders, isLoading: woLoading } = useQuery({
+    queryKey: ['company-work-orders', companyId],
+    queryFn: () => api.get('/work-orders', { params: { client_id: companyId, limit: 50 } }).then(r => r.data),
+  })
+
+  const woList = workOrders?.data || workOrders || []
+  const inProgressCount = woList.filter(wo => wo.status === 'in_progress').length
+  const deliveredCount = woList.reduce((sum, wo) => sum + (Number(wo.delivered_qty) || 0), 0)
+  const totalValue = woList.reduce((sum, wo) => sum + ((Number(wo.quantity) || 0) * (Number(wo.unit_price) || 0)), 0)
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-blue-500 font-medium">Piese in productie</p>
+          <p className="text-xl font-bold text-blue-700">{inProgressCount}</p>
+          <p className="text-[10px] text-blue-400">comenzi active</p>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-green-500 font-medium">Piese livrate</p>
+          <p className="text-xl font-bold text-green-700">{deliveredCount.toLocaleString('ro-RO')}</p>
+          <p className="text-[10px] text-green-400">total livrate</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+          <p className="text-xs text-purple-500 font-medium">Valoare comenzi</p>
+          <p className="text-xl font-bold text-purple-700">{totalValue.toLocaleString('ro-RO', { maximumFractionDigits: 0 })}</p>
+          <p className="text-[10px] text-purple-400">EUR total</p>
+        </div>
+      </div>
+
+      {/* Work orders table */}
+      <div>
+        <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+          <ShoppingCart size={14} /> Comenzi primite
+        </h4>
+        {woLoading ? (
+          <p className="text-sm text-slate-400">Se incarca...</p>
+        ) : woList.length > 0 ? (
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Comanda</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Produs</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Cant.</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Status</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Deadline</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {woList.map(wo => {
+                  const statusColors = {
+                    draft: 'bg-slate-100 text-slate-600',
+                    confirmed: 'bg-blue-100 text-blue-700',
+                    in_progress: 'bg-amber-100 text-amber-700',
+                    completed: 'bg-green-100 text-green-700',
+                    cancelled: 'bg-red-100 text-red-600',
+                  }
+                  return (
+                    <tr key={wo.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono text-xs text-blue-600">{wo.order_number || wo.wo_number || `#${wo.id}`}</td>
+                      <td className="px-3 py-2 text-slate-700 text-xs">{wo.product_name || wo.product || '—'}</td>
+                      <td className="px-3 py-2 text-right text-xs">{wo.quantity?.toLocaleString('ro-RO') || '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[wo.status] || 'bg-slate-100 text-slate-600'}`}>
+                          {wo.status || '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">{wo.deadline ? new Date(wo.deadline).toLocaleDateString('ro-RO') : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">Nicio comanda de la acest client.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ---- Supplier-specific sections ---- */
+function SupplierSection({ companyId }) {
+  const { data: purchaseOrders, isLoading: poLoading } = useQuery({
+    queryKey: ['company-purchase-orders', companyId],
+    queryFn: () => api.get('/purchasing/orders', { params: { supplierId: companyId, limit: 50 } }).then(r => r.data),
+  })
+
+  const { data: suppliedItems } = useQuery({
+    queryKey: ['company-supplied-items', companyId],
+    queryFn: () => api.get('/inventory/items', { params: { supplierId: companyId, limit: 50 } }).then(r => r.data),
+  })
+
+  const { data: scorecard } = useQuery({
+    queryKey: ['company-scorecard', companyId],
+    queryFn: () => api.get(`/purchasing/suppliers/${companyId}/scorecard`).then(r => r.data),
+  })
+
+  const poList = purchaseOrders?.data || purchaseOrders || []
+  const itemsList = suppliedItems?.data || suppliedItems || []
+
+  return (
+    <div className="space-y-4">
+      {/* Scorecard */}
+      {scorecard && (
+        <div>
+          <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+            <Star size={14} /> Evaluare furnizor
+          </h4>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Calitate', value: scorecard.quality_score ?? scorecard.qualityScore, color: 'blue' },
+              { label: 'Livrare', value: scorecard.delivery_score ?? scorecard.deliveryScore, color: 'green' },
+              { label: 'Pret', value: scorecard.price_score ?? scorecard.priceScore, color: 'purple' },
+            ].map(s => (
+              <div key={s.label} className={`bg-${s.color}-50 border border-${s.color}-200 rounded-lg p-3 text-center`}>
+                <p className={`text-xs text-${s.color}-500 font-medium`}>{s.label}</p>
+                <p className={`text-xl font-bold text-${s.color}-700`}>{s.value != null ? `${s.value}/10` : 'N/A'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Purchase orders */}
+      <div>
+        <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+          <ShoppingCart size={14} /> Comenzi de achizitie
+        </h4>
+        {poLoading ? (
+          <p className="text-sm text-slate-400">Se incarca...</p>
+        ) : poList.length > 0 ? (
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Nr. PO</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Total</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Status</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Data</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {poList.map(po => {
+                  const statusColors = {
+                    draft: 'bg-slate-100 text-slate-600',
+                    sent: 'bg-blue-100 text-blue-700',
+                    confirmed: 'bg-amber-100 text-amber-700',
+                    received: 'bg-green-100 text-green-700',
+                    cancelled: 'bg-red-100 text-red-600',
+                  }
+                  return (
+                    <tr key={po.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono text-xs text-blue-600">{po.po_number || po.order_number || `#${po.id}`}</td>
+                      <td className="px-3 py-2 text-right text-xs font-medium">{po.total != null ? `${Number(po.total).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} ${po.currency || 'EUR'}` : '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[po.status] || 'bg-slate-100 text-slate-600'}`}>
+                          {po.status || '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">{po.created_at ? new Date(po.created_at).toLocaleDateString('ro-RO') : po.date ? new Date(po.date).toLocaleDateString('ro-RO') : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">Nicio comanda de achizitie.</p>
+        )}
+      </div>
+
+      {/* Supplied items */}
+      {itemsList.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+            <Package size={14} /> Articole furnizate ({itemsList.length})
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {itemsList.slice(0, 20).map(item => (
+              <span key={item.id} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
+                {item.code} — {item.name}
+              </span>
+            ))}
+            {itemsList.length > 20 && <span className="text-xs text-slate-400">+{itemsList.length - 20} altele</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CompanyDetail({ company, onClose }) {
   const qc = useQueryClient()
   const [addContact, setAddContact] = useState(false)
   const [editCompany, setEditCompany] = useState(false)
   const [editContact, setEditContact] = useState(null)
-  const [contactForm, setContactForm] = useState({ fullName: '', role: '', phone: '', email: '' })
+  const [detailTab, setDetailTab] = useState('info')
+  const [contactForm, setContactForm] = useState({ fullName: '', role: '', department: '', phone: '', email: '' })
   const fc = (k) => (e) => setContactForm({ ...contactForm, [k]: e.target.value })
+
+  const types = getCompanyTypes(company)
+  const isClient = types.includes('client') || types.includes('both')
+  const isSupplier = types.includes('supplier') || types.includes('furnizor') || types.includes('both')
 
   const contactMutation = useMutation({
     mutationFn: (data) => api.post(`/companies/${company.id}/contacts`, data),
@@ -222,20 +451,27 @@ function CompanyDetail({ company, onClose }) {
     },
   })
 
+  // Build tabs dynamically
+  const tabs = [['info', 'Informatii']]
+  if (isClient) tabs.push(['client', 'Comenzi client'])
+  if (isSupplier) tabs.push(['supplier', 'Achizitii'])
+  tabs.push(['contacts', 'Contacte'])
+  tabs.push(['documents', 'Documente'])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-slate-800">{company.name}</h3>
+            <h3 className="font-semibold text-slate-800 text-lg">{company.name}</h3>
             <div className="flex flex-wrap gap-1 mt-1">
-              {getCompanyTypes(company).map(t => (
+              {types.map(t => (
                 <span key={t} className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[t] || 'bg-slate-100 text-slate-600'}`}>
                   {TYPE_LABELS[t] || t}
                 </span>
               ))}
             </div>
-            <p className="text-xs text-slate-400 mt-1">{company.fiscal_code && `CIF: ${company.fiscal_code} • `}{company.city}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setEditCompany(true)} className="btn-secondary text-xs flex items-center gap-1"><Pencil size={12} /> Editeaza</button>
@@ -249,58 +485,147 @@ function CompanyDetail({ company, onClose }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-sm mb-4">
-          {company.phone && <div><span className="text-slate-400">Tel: </span>{company.phone}</div>}
-          {company.email && <div><span className="text-slate-400">Email: </span>{company.email}</div>}
+        {/* Tabs */}
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-4 flex-wrap">
+          {tabs.map(([t, l]) => (
+            <button key={t} onClick={() => setDetailTab(t)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors
+                ${detailTab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              {l}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-medium text-slate-700">Contacte</h4>
-          <button onClick={() => setAddContact(!addContact)} className="text-xs text-blue-500 hover:text-blue-700">+ Adauga</button>
-        </div>
-
-        {addContact && (
-          <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Nume *</label>
-                <input className="input text-xs" placeholder="Ex: Ion Popescu" value={contactForm.fullName} onChange={fc('fullName')} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Functie</label>
-                <input className="input text-xs" placeholder="Ex: Director" value={contactForm.role} onChange={fc('role')} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
-                <input className="input text-xs" placeholder="Ex: 0740123456" value={contactForm.phone} onChange={fc('phone')} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                <input className="input text-xs" placeholder="Ex: ion@exemplu.ro" value={contactForm.email} onChange={fc('email')} />
-              </div>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setAddContact(false)} className="btn-secondary text-xs py-1">Anuleaza</button>
-              <button onClick={() => contactMutation.mutate(contactForm)} disabled={!contactForm.fullName} className="btn-primary text-xs py-1">Salveaza</button>
+        {/* Info tab */}
+        {detailTab === 'info' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {company.fiscal_code && (
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-400 text-xs block mb-0.5">CIF / Cod fiscal</span>
+                  <p className="font-medium text-slate-800">{company.fiscal_code}</p>
+                </div>
+              )}
+              {company.trade_register && (
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-400 text-xs block mb-0.5">Reg. comertului</span>
+                  <p className="font-medium text-slate-800">{company.trade_register}</p>
+                </div>
+              )}
+              {(company.city || company.address) && (
+                <div className="bg-slate-50 rounded-lg p-3 col-span-2">
+                  <span className="text-slate-400 text-xs block mb-0.5">Adresa</span>
+                  <p className="font-medium text-slate-800">{[company.address, company.city].filter(Boolean).join(', ') || '—'}</p>
+                </div>
+              )}
+              {company.phone && (
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-400 text-xs block mb-0.5">Telefon</span>
+                  <p className="font-medium text-slate-800">{company.phone}</p>
+                </div>
+              )}
+              {company.email && (
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-400 text-xs block mb-0.5">Email</span>
+                  <p className="font-medium text-slate-800">{company.email}</p>
+                </div>
+              )}
+              {company.website && (
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-400 text-xs block mb-0.5">Website</span>
+                  <p className="font-medium text-slate-800">{company.website}</p>
+                </div>
+              )}
+              {company.payment_terms_days && (
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-400 text-xs block mb-0.5">Termen plata</span>
+                  <p className="font-medium text-slate-800">{company.payment_terms_days} zile</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {company.contacts?.length === 0 && <p className="text-slate-400 text-sm">Fara contacte.</p>}
-        <div className="space-y-2">
-          {company.contacts?.map(c => (
-            <div key={c.id} className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-3">
-              {c.is_primary && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 rounded">principal</span>}
-              <div className="flex-1">
-                <span className="font-medium text-slate-800 text-sm">{c.full_name}</span>
-                {c.role && <span className="text-xs text-slate-400 ml-2">{c.role}</span>}
-              </div>
-              {c.phone && <span className="text-xs text-slate-400">{c.phone}</span>}
-              <button onClick={() => setEditContact(c)} className="text-slate-400 hover:text-blue-500"><Pencil size={13} /></button>
-              <button onClick={() => { if (confirm('Sigur doriti sa stergeti contactul? Aceasta actiune este ireversibila.')) deleteContactMut.mutate(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+        {/* Client tab */}
+        {detailTab === 'client' && isClient && (
+          <ClientSection companyId={company.id} />
+        )}
+
+        {/* Supplier tab */}
+        {detailTab === 'supplier' && isSupplier && (
+          <SupplierSection companyId={company.id} />
+        )}
+
+        {/* Contacts tab */}
+        {detailTab === 'contacts' && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-slate-700">Contacte</h4>
+              <button onClick={() => setAddContact(!addContact)} className="text-xs text-blue-500 hover:text-blue-700">+ Adauga</button>
             </div>
-          ))}
-        </div>
+
+            {addContact && (
+              <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Nume *</label>
+                    <input className="input text-xs" placeholder="Ex: Ion Popescu" value={contactForm.fullName} onChange={fc('fullName')} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Functie</label>
+                    <input className="input text-xs" placeholder="Ex: Director" value={contactForm.role} onChange={fc('role')} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Departament</label>
+                    <input className="input text-xs" placeholder="Ex: Achizitii" value={contactForm.department} onChange={fc('department')} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                    <input className="input text-xs" placeholder="Ex: 0740123456" value={contactForm.phone} onChange={fc('phone')} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                    <input className="input text-xs" placeholder="Ex: ion@exemplu.ro" value={contactForm.email} onChange={fc('email')} />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setAddContact(false)} className="btn-secondary text-xs py-1">Anuleaza</button>
+                  <button onClick={() => contactMutation.mutate(contactForm)} disabled={!contactForm.fullName} className="btn-primary text-xs py-1">Salveaza</button>
+                </div>
+              </div>
+            )}
+
+            {company.contacts?.length === 0 && <p className="text-slate-400 text-sm">Fara contacte.</p>}
+            <div className="space-y-2">
+              {company.contacts?.map(c => (
+                <div key={c.id} className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-3">
+                  {c.is_primary && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 rounded">principal</span>}
+                  <div className="flex-1">
+                    <span className="font-medium text-slate-800 text-sm">{c.full_name}</span>
+                    {c.role && <span className="text-xs text-slate-400 ml-2">{c.role}</span>}
+                    {c.department && <span className="text-xs text-slate-400 ml-1">/ {c.department}</span>}
+                  </div>
+                  <div className="flex flex-col items-end text-xs text-slate-400">
+                    {c.phone && <span>{c.phone}</span>}
+                    {c.email && <span>{c.email}</span>}
+                  </div>
+                  <button onClick={() => setEditContact(c)} className="text-slate-400 hover:text-blue-500"><Pencil size={13} /></button>
+                  <button onClick={() => { if (confirm('Sigur doriti sa stergeti contactul? Aceasta actiune este ireversibila.')) deleteContactMut.mutate(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Documents tab */}
+        {detailTab === 'documents' && (
+          <div>
+            <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+              <FileText size={14} /> Documente asociate
+            </h4>
+            <p className="text-sm text-slate-400">Niciun document asociat acestei companii.</p>
+          </div>
+        )}
       </div>
 
       {editCompany && <CompanyModal editCompany={company} onClose={() => setEditCompany(false)} />}

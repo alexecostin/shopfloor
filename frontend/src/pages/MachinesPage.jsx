@@ -111,7 +111,7 @@ function CapabilityModal({ machineId, onClose }) {
 
   const mutation = useMutation({
     mutationFn: (data) => api.post(`/machines/${machineId}/capabilities`, data),
-    onSuccess: () => { qc.invalidateQueries(['machine-detail', machineId]); toast.success('Capabilitate adaugata.'); onClose() },
+    onSuccess: () => { qc.invalidateQueries(['machine-detail', machineId]); qc.invalidateQueries(['machine', machineId]); qc.invalidateQueries(['machines']); toast.success('Capabilitate adaugata.'); onClose() },
     onError: (e) => {
       const msg = e.response?.data?.message || '';
       if (msg.includes('duplicate') || msg.includes('unique')) toast.error('Aceasta inregistrare exista deja.');
@@ -305,15 +305,35 @@ function MachineCard({ machine, onClose, isAdmin }) {
                 </p>
               )}
 
+              {/* Legend for operation colors */}
+              {detail?.capabilities?.length > 0 && (
+                <div className="flex gap-4 mb-3 text-[10px] text-slate-400 items-center">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Masina preferata
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Operatie compatibila
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" /> Alternativa (fara timp ciclu)
+                  </span>
+                </div>
+              )}
+
               <div className="space-y-2">
                 {detail?.capabilities?.map(cap => {
                   const pph = piecesPerHour(cap)
+                  const borderColor = cap.is_preferred
+                    ? 'border-l-4 border-l-green-500 bg-green-50'
+                    : cap.cycle_time_seconds
+                      ? 'border-l-4 border-l-blue-400 bg-slate-50'
+                      : 'border-l-4 border-l-slate-300 bg-slate-50'
                   return (
-                    <div key={cap.id} className="bg-slate-50 rounded-lg p-3 flex items-center gap-3">
+                    <div key={cap.id} className={`rounded-lg p-3 flex items-center gap-3 ${borderColor}`}>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-slate-800 text-sm">{cap.operation_type}</span>
-                          {cap.is_preferred && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 rounded">preferat</span>}
+                          {cap.is_preferred && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">preferat</span>}
                           {cap.operation_name && <span className="text-xs text-slate-400">— {cap.operation_name}</span>}
                         </div>
                         <div className="flex gap-4 mt-1 text-xs text-slate-400">
@@ -454,6 +474,13 @@ function MachineCard({ machine, onClose, isAdmin }) {
                 })}
               </div>
 
+              {/* Helper text for certification dates */}
+              <div className="mt-3 mb-2 bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-[10px] text-slate-400 italic">
+                  Data certificare = cand a fost certificat operatorul pe acest tip de masina. Data expirare = pana cand e valabila certificarea.
+                </p>
+              </div>
+
               {showAddCert && (
                 <div className="mt-3 bg-blue-50 rounded-lg p-3 border border-blue-100">
                   <h5 className="text-xs font-medium text-blue-700 mb-2">Adauga certificare</h5>
@@ -470,9 +497,15 @@ function MachineCard({ machine, onClose, isAdmin }) {
                         <option value="senior">Senior</option>
                         <option value="trainer">Trainer</option>
                       </select>
-                      <input className="input text-sm" type="date" placeholder="Data certificare" value={certForm.certifiedDate} onChange={e => setCertForm({ ...certForm, certifiedDate: e.target.value })} />
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">Data certificare *</label>
+                        <input className="input text-sm" type="date" value={certForm.certifiedDate} onChange={e => setCertForm({ ...certForm, certifiedDate: e.target.value })} />
+                      </div>
                     </div>
-                    <input className="input text-sm w-full" type="date" placeholder="Data expirare (optional)" value={certForm.expiryDate} onChange={e => setCertForm({ ...certForm, expiryDate: e.target.value })} />
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">Data expirare (optional)</label>
+                      <input className="input text-sm w-full" type="date" value={certForm.expiryDate} onChange={e => setCertForm({ ...certForm, expiryDate: e.target.value })} />
+                    </div>
                     <div className="flex gap-2 justify-end">
                       <button onClick={() => setShowAddCert(false)} className="btn-secondary text-xs">Anuleaza</button>
                       <button

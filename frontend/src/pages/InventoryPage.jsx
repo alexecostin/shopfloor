@@ -433,6 +433,18 @@ export default function InventoryPage() {
     enabled: tab === 'dashboard',
   })
 
+  const { data: dashBelowMin } = useQuery({
+    queryKey: ['inventory-dashboard-below-min'],
+    queryFn: () => api.get('/inventory/items', { params: { belowMin: true, limit: 10 } }).then(r => r.data),
+    enabled: tab === 'dashboard',
+  })
+
+  const { data: dashPurchaseOrders } = useQuery({
+    queryKey: ['inventory-dashboard-po'],
+    queryFn: () => api.get('/purchasing/orders', { params: { status: 'active', limit: 5 } }).then(r => r.data),
+    enabled: tab === 'dashboard',
+  })
+
   const { data: stockLevels, isLoading: stockLoading } = useQuery({
     queryKey: ['stock-levels'],
     queryFn: () => api.get('/inventory/stock-levels').then(r => r.data),
@@ -678,9 +690,10 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {tab === 'dashboard' && dashboard && (
+      {tab === 'dashboard' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-5">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -688,24 +701,24 @@ export default function InventoryPage() {
                 </div>
                 <div>
                   <p className="text-xs text-blue-500 font-medium uppercase tracking-wide">Total articole</p>
-                  <p className="text-2xl font-bold text-blue-700">{dashboard.totalItems ?? 0}</p>
+                  <p className="text-2xl font-bold text-blue-700">{dashboard?.totalItems ?? 0}</p>
                 </div>
               </div>
               <p className="text-xs text-blue-400">Articole inregistrate in sistem</p>
             </div>
 
-            <div className={`rounded-xl border-2 p-5 ${(dashboard.alertsCount || 0) > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+            <div className={`rounded-xl border-2 p-5 ${(dashboard?.alertsCount || 0) > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
               <div className="flex items-center gap-3 mb-2">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${(dashboard.alertsCount || 0) > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
-                  <AlertTriangle size={20} className={(dashboard.alertsCount || 0) > 0 ? 'text-red-600' : 'text-green-600'} />
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${(dashboard?.alertsCount || 0) > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
+                  <AlertTriangle size={20} className={(dashboard?.alertsCount || 0) > 0 ? 'text-red-600' : 'text-green-600'} />
                 </div>
                 <div>
-                  <p className={`text-xs font-medium uppercase tracking-wide ${(dashboard.alertsCount || 0) > 0 ? 'text-red-500' : 'text-green-500'}`}>Sub stoc minim</p>
-                  <p className={`text-2xl font-bold ${(dashboard.alertsCount || 0) > 0 ? 'text-red-600' : 'text-green-700'}`}>{dashboard.alertsCount ?? 0}</p>
+                  <p className={`text-xs font-medium uppercase tracking-wide ${(dashboard?.alertsCount || 0) > 0 ? 'text-red-500' : 'text-green-500'}`}>Sub stoc minim</p>
+                  <p className={`text-2xl font-bold ${(dashboard?.alertsCount || 0) > 0 ? 'text-red-600' : 'text-green-700'}`}>{dashboard?.alertsCount ?? 0}</p>
                 </div>
               </div>
-              <p className={`text-xs ${(dashboard.alertsCount || 0) > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                {(dashboard.alertsCount || 0) > 0 ? 'Articole sub nivelul minim de stoc' : 'Nicio alerta activa'}
+              <p className={`text-xs ${(dashboard?.alertsCount || 0) > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {(dashboard?.alertsCount || 0) > 0 ? 'Articole sub nivelul minim de stoc' : 'Nicio alerta activa'}
               </p>
             </div>
 
@@ -717,31 +730,111 @@ export default function InventoryPage() {
                 <div>
                   <p className="text-xs text-emerald-500 font-medium uppercase tracking-wide">Valoare totala stoc</p>
                   <p className="text-2xl font-bold text-emerald-700">
-                    {Number(dashboard.totalStockValue || 0).toLocaleString('ro-RO', { maximumFractionDigits: 0 })} EUR
+                    {Number(dashboard?.totalStockValue || 0).toLocaleString('ro-RO', { maximumFractionDigits: 0 })} EUR
                   </p>
                 </div>
               </div>
               <p className="text-xs text-emerald-400">Valoare estimata pe baza costului unitar</p>
             </div>
+
+            <div className="rounded-xl border-2 border-purple-200 bg-purple-50 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                  <Package size={20} className="text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-purple-500 font-medium uppercase tracking-wide">Comenzi achizitie active</p>
+                  <p className="text-2xl font-bold text-purple-700">
+                    {(() => { const poData = dashPurchaseOrders?.data || dashPurchaseOrders || []; return Array.isArray(poData) ? poData.length : 0 })()}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-purple-400">Comenzi de achizitie in desfasurare</p>
+            </div>
           </div>
 
-          {dashboard.recentMovements && dashboard.recentMovements.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Miscari recente ({dashboard.recentMovements.length})</h3>
-              <div className="space-y-2">
-                {dashboard.recentMovements.slice(0, 10).map((m, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-50 last:border-0">
-                    <div>
-                      <span className="font-medium text-slate-700">{m.item_name || m.name || '—'}</span>
-                      <span className="text-xs text-slate-400 ml-2">{m.movement_type || m.type || ''}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-medium text-slate-600">{m.qty || m.quantity || '—'}</span>
-                      {m.date && <span className="text-xs text-slate-400 ml-2">{new Date(m.date).toLocaleDateString('ro-RO')}</span>}
-                    </div>
-                  </div>
-                ))}
+          {/* Below min stock table */}
+          {(() => {
+            const belowMinList = dashBelowMin?.data || dashBelowMin || []
+            return belowMinList.length > 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <h3 className="text-sm font-semibold text-red-600 mb-3 flex items-center gap-2">
+                  <AlertTriangle size={14} /> Top articole sub stoc minim
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Articol</th>
+                        <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Stoc curent</th>
+                        <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Stoc minim</th>
+                        <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Deficit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {belowMinList.slice(0, 10).map(item => {
+                        const currentQty = Number(item.current_qty || 0)
+                        const minStock = Number(item.min_stock || 0)
+                        const deficit = Math.max(0, minStock - currentQty)
+                        return (
+                          <tr key={item.id} className="hover:bg-red-50">
+                            <td className="px-3 py-2">
+                              <span className="font-medium text-slate-800">{item.name}</span>
+                              <span className="text-xs text-slate-400 ml-2">{item.code}</span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-red-600">{currentQty.toLocaleString('ro-RO', { maximumFractionDigits: 2 })} {item.unit}</td>
+                            <td className="px-3 py-2 text-right text-slate-500">{minStock} {item.unit}</td>
+                            <td className="px-3 py-2 text-right font-bold text-red-700">{deficit.toLocaleString('ro-RO', { maximumFractionDigits: 2 })} {item.unit}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+            ) : null
+          })()}
+
+          {/* Recent movements */}
+          {dashboard?.recentMovements && dashboard.recentMovements.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3">Ultimele 10 miscari de stoc</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Articol</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Tip miscare</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Cantitate</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dashboard.recentMovements.slice(0, 10).map((m, i) => {
+                      const movementLabels = {
+                        receipt: 'Receptie', production_input: 'Consum productie', production_output: 'Iesire productie',
+                        shipment: 'Expeditie', adjustment_plus: 'Ajustare +', adjustment_minus: 'Ajustare -', scrap: 'Rebut',
+                      }
+                      const mType = m.movement_type || m.type || ''
+                      return (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-medium text-slate-700">{m.item_name || m.name || '—'}</td>
+                          <td className="px-3 py-2 text-xs text-slate-500">{movementLabels[mType] || mType}</td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-600">{m.qty || m.quantity || '—'}</td>
+                          <td className="px-3 py-2 text-xs text-slate-400">{(m.date || m.created_at) ? new Date(m.date || m.created_at).toLocaleDateString('ro-RO') : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {!dashboard && (
+            <div className="text-center py-12 text-slate-400">
+              <Package size={40} className="mx-auto mb-3 opacity-30" />
+              <p>Se incarca datele dashboard...</p>
             </div>
           )}
         </div>

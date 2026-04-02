@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Search, Plus, X, ChevronDown, Loader2 } from 'lucide-react'
 import api from '../api/client'
 
@@ -45,7 +45,10 @@ export default function SearchableSelect({
       .catch(() => setSelectedItem(null));
   }, [value, endpoint])
 
-  // Search
+  // Serialize filterParams to avoid infinite re-render loops
+  const filterParamsKey = JSON.stringify(filterParams);
+
+  // Search when dropdown is open (fetches on open even without query)
   useEffect(() => {
     if (!open || !endpoint) return;
     setLoading(true);
@@ -58,7 +61,7 @@ export default function SearchableSelect({
       })
       .catch(() => setOptions([]))
       .finally(() => setLoading(false));
-  }, [debouncedQuery, open, endpoint]);
+  }, [debouncedQuery, open, endpoint, filterParamsKey]);
 
   // Click outside
   useEffect(() => {
@@ -144,7 +147,7 @@ export default function SearchableSelect({
           )}
           {!loading && options.length === 0 && (
             <div className="p-3 text-xs text-slate-400 text-center">
-              {debouncedQuery ? 'Niciun rezultat gasit' : 'Niciun rezultat. Tastati pentru a cauta...'}
+              Niciun rezultat gasit
             </div>
           )}
           {options.map(item => (

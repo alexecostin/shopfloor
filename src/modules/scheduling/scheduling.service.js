@@ -33,10 +33,15 @@ export const createConfig = async (data, userId) => {
 
 export const updateConfig = async (id, data) => {
   if (data.priorities) {
-    const weights = data.priorities.reduce((s, p) => s + (p.weight || 0), 0);
+    // Parse if string for validation
+    const priorities = typeof data.priorities === 'string' ? JSON.parse(data.priorities) : data.priorities;
+    const weights = priorities.reduce((s, p) => s + (p.weight || 0), 0);
     if (Math.abs(weights - 100) > 0.01) throw Object.assign(new Error('Suma ponderilor trebuie sa fie 100.'), { statusCode: 400 });
   }
-  const [r] = await db('planning.scheduling_configs').where('id', id).update({ ...data, updated_at: new Date() }).returning('*');
+  const row = { ...data, updated_at: new Date() };
+  if (row.priorities && typeof row.priorities !== 'string') row.priorities = JSON.stringify(row.priorities);
+  if (row.constraints && typeof row.constraints !== 'string') row.constraints = JSON.stringify(row.constraints);
+  const [r] = await db('planning.scheduling_configs').where('id', id).update(row).returning('*');
   return r;
 };
 

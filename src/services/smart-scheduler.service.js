@@ -2,6 +2,7 @@ import db from '../config/db.js';
 import { aggregatePiecesFromOrders } from './piece-planning.service.js';
 import { getTenantConfig } from './app-config.service.js';
 import { getCertifiedOperators } from './certification.service.js';
+import { recalculateCapacity } from '../modules/planning/planning.service.js';
 
 /**
  * Smart Auto-Scheduling Algorithm.
@@ -291,6 +292,18 @@ export async function applySmartPlan(planResult, periodStart, periodEnd, userId)
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = await db('planning.daily_allocations').insert(rows.slice(i, i + chunkSize)).returning('*');
     inserted = inserted.concat(chunk);
+  }
+
+  // Recalculate capacity_load for each unique machine+date combination
+  const capacityCombos = new Set(inserted.map(a => `${a.machine_id}|${a.plan_date}`));
+  for (const combo of capacityCombos) {
+    const [machineId, planDate] = combo.split('|');
+    try {
+      await recalculateCapacity(machineId, planDate, masterPlan.id);
+    } catch (e) {
+      // Don't fail the whole apply if capacity recalc fails for one entry
+      console.warn(`recalculateCapacity failed for ${machineId} ${planDate}:`, e.message);
+    }
   }
 
   return {

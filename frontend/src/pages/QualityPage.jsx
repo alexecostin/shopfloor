@@ -602,9 +602,17 @@ function SPCTab() {
       <p className="text-sm text-slate-500 mb-4">Analiza statistica a procesului (Control Chart, Cp, Cpk)</p>
 
       <div className="flex flex-wrap items-end gap-3 mb-6">
-        <div>
-          <label className="block text-sm text-slate-600 mb-1">Produs ID</label>
-          <input className="input w-64" value={productId} onChange={e => setProductId(e.target.value)} placeholder="UUID produs" />
+        <div className="w-64">
+          <label className="block text-sm text-slate-600 mb-1">Produs</label>
+          <SearchableSelect
+            endpoint="/bom/products"
+            labelField="name"
+            valueField="id"
+            placeholder="Cauta produs..."
+            value={productId}
+            onChange={(id) => setProductId(id || '')}
+            allowCreate={false}
+          />
         </div>
         <div>
           <label className="block text-sm text-slate-600 mb-1">Caracteristica</label>
@@ -998,12 +1006,28 @@ function CreateNCRModal({ onClose, onSubmit, loading }) {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Produs ID</label>
-              <input className="input w-full" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} />
+              <label className="block text-sm text-slate-600 mb-1">Produs</label>
+              <SearchableSelect
+                endpoint="/bom/products"
+                labelField="name"
+                valueField="id"
+                placeholder="Cauta produs..."
+                value={form.product_id}
+                onChange={(id) => setForm(f => ({ ...f, product_id: id }))}
+                allowCreate={false}
+              />
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Comanda ID</label>
-              <input className="input w-full" value={form.order_id} onChange={e => setForm(f => ({ ...f, order_id: e.target.value }))} />
+              <label className="block text-sm text-slate-600 mb-1">Comanda</label>
+              <SearchableSelect
+                endpoint="/work-orders"
+                labelField="work_order_number"
+                valueField="id"
+                placeholder="Cauta comanda..."
+                value={form.order_id}
+                onChange={(id) => setForm(f => ({ ...f, order_id: id }))}
+                allowCreate={false}
+              />
             </div>
             <div>
               <label className="block text-sm text-slate-600 mb-1">Cant. afectata</label>
@@ -1353,8 +1377,16 @@ function CreateCAPAModal({ ncrList, onClose, onSubmit, loading }) {
             <textarea className="input w-full" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Responsabil (User ID)</label>
-            <input className="input w-full" value={form.responsible_user_id} onChange={e => setForm(f => ({ ...f, responsible_user_id: e.target.value }))} placeholder="UUID (optional)" />
+            <label className="block text-sm text-slate-600 mb-1">Responsabil</label>
+            <SearchableSelect
+              endpoint="/auth/users"
+              labelField="full_name"
+              valueField="id"
+              placeholder="Cauta responsabil..."
+              value={form.responsible_user_id}
+              onChange={(id) => setForm(f => ({ ...f, responsible_user_id: id }))}
+              allowCreate={false}
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">Anuleaza</button>

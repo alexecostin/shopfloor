@@ -6,6 +6,7 @@ import {
   Truck, Plus, Package, Eye, X, Send, CheckCircle2,
   ChevronRight, Ban, FileText, Box
 } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 
 const STATUS_META = {
   preparing:  { label: 'In pregatire',  color: '#F59E0B', bg: 'bg-amber-100 text-amber-700' },
@@ -93,13 +94,6 @@ function NewShipmentModal({ onClose }) {
   })
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
-  // Load work orders for selection
-  const { data: ordersData } = useQuery({
-    queryKey: ['work-orders-for-shipment'],
-    queryFn: () => api.get('/work-orders', { params: { limit: 200 } }).then(r => r.data),
-  })
-  const orders = ordersData?.data || ordersData || []
-
   // Load companies for transporter selection
   const { data: companiesData } = useQuery({
     queryKey: ['companies-for-shipment'],
@@ -107,12 +101,10 @@ function NewShipmentModal({ onClose }) {
   })
   const companies = companiesData?.data || companiesData || []
 
-  function handleOrderSelect(e) {
-    const orderId = e.target.value
-    const order = orders.find(o => o.id === orderId)
+  function handleOrderSelect(id, order) {
     setForm(prev => ({
       ...prev,
-      order_id: orderId,
+      order_id: id || '',
       client_company_id: order?.client_company_id || order?.company_id || '',
       delivery_address: order?.delivery_address || order?.address || '',
       quantity_shipped: order?.quantity || order?.qty_planned || '',
@@ -159,14 +151,15 @@ function NewShipmentModal({ onClose }) {
         <div className="space-y-3">
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Comanda asociata</label>
-            <select className="input" value={form.order_id} onChange={handleOrderSelect}>
-              <option value="">Fara comanda asociata</option>
-              {orders.map(o => (
-                <option key={o.id} value={o.id}>
-                  {o.work_order_number || o.order_number} — {o.product_name || o.product_reference || ''}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              endpoint="/work-orders"
+              labelField="work_order_number"
+              valueField="id"
+              placeholder="Cauta comanda..."
+              value={form.order_id || null}
+              onChange={handleOrderSelect}
+              allowCreate={false}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -588,6 +581,21 @@ export default function ShipmentsPage() {
     queryFn: () => api.get('/shipments', { params: filterStatus ? { status: filterStatus } : {} }).then(r => r.data),
   })
 
+  // Load work orders & companies for display labels
+  const { data: ordersData } = useQuery({
+    queryKey: ['work-orders-lookup'],
+    queryFn: () => api.get('/work-orders', { params: { limit: 500 } }).then(r => r.data),
+  })
+  const ordersMap = {}
+  ;(ordersData?.data || ordersData || []).forEach(o => { ordersMap[o.id] = o })
+
+  const { data: companiesData } = useQuery({
+    queryKey: ['companies-lookup'],
+    queryFn: () => api.get('/companies', { params: { limit: 500 } }).then(r => r.data),
+  })
+  const companiesMap = {}
+  ;(companiesData?.data || companiesData || []).forEach(c => { companiesMap[c.id] = c })
+
   const shipments = data?.data || []
 
   return (
@@ -647,8 +655,8 @@ export default function ShipmentsPage() {
                   onClick={() => setSelectedId(s.id)}
                 >
                   <td className="px-4 py-3 font-medium text-slate-700">{s.shipment_number}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{s.order_id ? s.order_id.substring(0, 8) + '...' : '-'}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{s.client_company_id ? s.client_company_id.substring(0, 8) + '...' : '-'}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{s.order_id ? (ordersMap[s.order_id]?.work_order_number || ordersMap[s.order_id]?.order_number || s.order_id.substring(0, 8) + '...') : '-'}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{s.client_company_id ? (companiesMap[s.client_company_id]?.name || companiesMap[s.client_company_id]?.company_name || s.client_company_id.substring(0, 8) + '...') : '-'}</td>
                   <td className="px-4 py-3">
                     {s.quantity_shipped}
                     {s.is_partial && <span className="ml-1 text-xs text-amber-500">(partial)</span>}

@@ -111,6 +111,9 @@ function ComparisonTable({ data }) {
 export default function MachineKPIPage() {
   const [machineId, setMachineId] = useState('')
   const [period, setPeriod] = useState('month')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [useCustomDates, setUseCustomDates] = useState(false)
   const [compareMode, setCompareMode] = useState(false)
   const [compareIds, setCompareIds] = useState([])
 
@@ -119,16 +122,32 @@ export default function MachineKPIPage() {
     queryFn: () => api.get('/machines?limit=500').then(r => r.data?.data || r.data || []),
   })
 
+  const kpiParams = useCustomDates && dateFrom && dateTo
+    ? `dateFrom=${dateFrom}&dateTo=${dateTo}`
+    : `period=${period}`
+
   const { data: kpi, isLoading } = useQuery({
-    queryKey: ['machine-kpi', machineId, period],
-    queryFn: () => api.get(`/machines/${machineId}/kpi?period=${period}`).then(r => r.data),
+    queryKey: ['machine-kpi', machineId, period, dateFrom, dateTo, useCustomDates],
+    queryFn: () => api.get(`/machines/${machineId}/kpi?${kpiParams}`).then(r => r.data),
     enabled: !!machineId && !compareMode,
   })
 
   const { data: comparisonData, isLoading: compLoading } = useQuery({
-    queryKey: ['machine-kpi-compare', compareIds, period],
-    queryFn: () => api.get(`/machines/kpi/comparison?machineIds=${compareIds.join(',')}&period=${period}`).then(r => r.data),
+    queryKey: ['machine-kpi-compare', compareIds, period, dateFrom, dateTo, useCustomDates],
+    queryFn: () => api.get(`/machines/kpi/comparison?machineIds=${compareIds.join(',')}&${kpiParams}`).then(r => r.data),
     enabled: compareMode && compareIds.length >= 2,
+  })
+
+  const { data: productionReport } = useQuery({
+    queryKey: ['machine-production-report', machineId, period, dateFrom, dateTo, useCustomDates],
+    queryFn: () => api.get(`/production/reports`, { params: { machineId, ...(useCustomDates && dateFrom && dateTo ? { dateFrom, dateTo } : { period }) } }).then(r => r.data),
+    enabled: !!machineId && !compareMode,
+  })
+
+  const { data: allocations } = useQuery({
+    queryKey: ['machine-allocations', machineId],
+    queryFn: () => api.get(`/planning/daily_allocations`, { params: { machineId, limit: 20 } }).then(r => r.data),
+    enabled: !!machineId && !compareMode,
   })
 
   function toggleCompareId(id) {
@@ -142,19 +161,32 @@ export default function MachineKPIPage() {
         <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
           <BarChart3 size={22} /> KPI Utilaje
         </h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Period selector */}
           <div className="flex bg-slate-100 rounded-lg p-0.5">
             {PERIODS.map(p => (
               <button
                 key={p.value}
-                onClick={() => setPeriod(p.value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${period === p.value ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => { setPeriod(p.value); setUseCustomDates(false) }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${!useCustomDates && period === p.value ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 {p.label}
               </button>
             ))}
+            <button
+              onClick={() => setUseCustomDates(true)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${useCustomDates ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Personalizat
+            </button>
           </div>
+          {useCustomDates && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input text-xs py-1.5" />
+              <span className="text-xs text-slate-400">—</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input text-xs py-1.5" />
+            </div>
+          )}
           <button
             onClick={() => { setCompareMode(!compareMode); setCompareIds([]) }}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition ${compareMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
@@ -274,6 +306,71 @@ export default function MachineKPIPage() {
                   <StopReasonsChart reasons={kpi.topStopReasons} />
                 </div>
               </div>
+
+              {/* Production section */}
+              {(() => {
+                const reportData = productionReport?.data || productionReport || []
+                const allocData = allocations?.data || allocations || []
+                const reportList = Array.isArray(reportData) ? reportData : []
+                const allocList = Array.isArray(allocData) ? allocData : []
+                const totalPieces = reportList.reduce((s, r) => s + (Number(r.produced_qty) || Number(r.quantity) || 0), 0)
+                const uniqueClients = [...new Set(reportList.map(r => r.client_name || r.client).filter(Boolean))]
+
+                return (reportList.length > 0 || allocList.length > 0) ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Production stats */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                      <h2 className="text-sm font-semibold text-slate-700 mb-3">Productie pe masina</h2>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-blue-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-blue-500">Piese fabricate</p>
+                          <p className="text-2xl font-bold text-blue-700">{totalPieces.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-green-500">Clienti</p>
+                          <p className="text-2xl font-bold text-green-700">{uniqueClients.length}</p>
+                        </div>
+                      </div>
+                      {reportList.length > 0 && (
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {reportList.slice(0, 15).map((r, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
+                              <span className="text-slate-700">{r.product_name || r.operation || 'N/A'}</span>
+                              <span className="font-medium text-slate-600">{(Number(r.produced_qty) || Number(r.quantity) || 0).toLocaleString()} buc</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Allocations / orders */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                      <h2 className="text-sm font-semibold text-slate-700 mb-3">Comenzi pe masina</h2>
+                      {allocList.length > 0 ? (
+                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                          {allocList.map((a, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-50">
+                              <div>
+                                <span className="font-medium text-slate-700">
+                                  {a.plan_date ? new Date(a.plan_date).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' }) : '—'}
+                                </span>
+                                {a.product_name && <span className="text-slate-400 ml-2">{a.product_name}</span>}
+                                {a.work_order_number && <span className="text-blue-500 ml-2">#{a.work_order_number}</span>}
+                              </div>
+                              <div className="text-slate-500">
+                                {a.planned_qty && <span>{a.planned_qty.toLocaleString()} buc</span>}
+                                {a.shift && <span className="ml-1 text-slate-400">({a.shift})</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-400">Nicio alocare.</p>
+                      )}
+                    </div>
+                  </div>
+                ) : null
+              })()}
 
               {/* Period info */}
               <div className="text-xs text-slate-400">

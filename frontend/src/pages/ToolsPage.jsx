@@ -5,15 +5,36 @@ import toast from 'react-hot-toast'
 import { Plus, X, Pencil, Trash2, ShieldCheck, AlertTriangle, XCircle } from 'lucide-react'
 
 /* ---- Calibration Status Helpers ---- */
-const calibrationBadge = (status) => {
+const calibrationBadge = (status, tool) => {
   const map = {
     valid: { cls: 'bg-green-100 text-green-700', label: 'Calibrat' },
-    expiring_soon: { cls: 'bg-amber-100 text-amber-700', label: 'Expira curand' },
-    expired: { cls: 'bg-red-100 text-red-700', label: 'Expirat' },
+    expiring_soon: { cls: 'bg-amber-100 text-amber-700', label: 'Calibrare expira curand' },
+    expired: { cls: 'bg-red-100 text-red-700', label: 'Calibrare expirata' },
     not_applicable: { cls: 'bg-slate-100 text-slate-500', label: 'N/A' },
   }
   const m = map[status] || map.not_applicable
-  return <span className={`text-xs px-2 py-0.5 rounded-full ${m.cls}`}>{m.label}</span>
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full ${m.cls}`} title={
+      tool?.next_calibration_date
+        ? `Calibrare expira pe ${new Date(tool.next_calibration_date).toLocaleDateString('ro-RO')}`
+        : status === 'expiring_soon' ? 'Calibrarea expira in curand — programeaza recalibrare' : ''
+    }>
+      {m.label}
+    </span>
+  )
+}
+
+const maintenanceBadge = (tool) => {
+  if (!tool.maintenance_interval_cycles || !tool.current_cycles) return null
+  const pct = Math.round((tool.current_cycles / tool.maintenance_interval_cycles) * 100)
+  if (pct < 80) return null
+  const cls = pct >= 100 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+  const label = pct >= 100 ? 'Mentenanta necesara' : 'Mentenanta aproape'
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full ${cls}`} title={`${tool.current_cycles?.toLocaleString()}/${tool.maintenance_interval_cycles?.toLocaleString()} cicluri (${pct}%) — programeaza inlocuire/mentenanta`}>
+      {label}
+    </span>
+  )
 }
 
 /* ---- Calibration Modal ---- */
@@ -110,7 +131,7 @@ function CalibrationDashboard() {
           <AlertTriangle className="text-amber-600" size={20} />
           <div>
             <p className="text-2xl font-bold text-amber-700">{expiringSoon}</p>
-            <p className="text-xs text-amber-600">Expira curand</p>
+            <p className="text-xs text-amber-600">Calibrare expira curand</p>
           </div>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
@@ -138,9 +159,20 @@ function CalibrationDashboard() {
               {tools.map(t => (
                 <tr key={t.id} className="hover:bg-slate-50">
                   <td className="px-4 py-2 font-mono text-xs text-slate-600">{t.code}</td>
-                  <td className="px-4 py-2 text-slate-800">{t.name}</td>
-                  <td className="px-4 py-2 text-xs text-slate-500">{t.next_calibration_date ? new Date(t.next_calibration_date).toLocaleDateString('ro-RO') : '-'}</td>
-                  <td className="px-4 py-2">{calibrationBadge(t.calibration_status)}</td>
+                  <td className="px-4 py-2 text-slate-800">
+                    {t.name}
+                    {t.maintenance_interval_cycles && t.current_cycles >= t.maintenance_interval_cycles * 0.8 && (
+                      <span className="block text-[10px] text-amber-600 mt-0.5">
+                        {t.current_cycles?.toLocaleString()}/{t.maintenance_interval_cycles?.toLocaleString()} cicluri — mentenanta necesara
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-slate-500">
+                    {t.next_calibration_date
+                      ? `Calibrare expira pe ${new Date(t.next_calibration_date).toLocaleDateString('ro-RO')}`
+                      : '-'}
+                  </td>
+                  <td className="px-4 py-2">{calibrationBadge(t.calibration_status, t)}</td>
                   <td className="px-4 py-2 text-right">
                     <button onClick={() => setCalibrateTool(t)} className="text-xs text-blue-600 hover:underline">Calibreaza</button>
                   </td>
@@ -386,15 +418,40 @@ function ToolDetail({ tool, onClose }) {
               <div>
                 <p className="text-xs font-medium text-slate-600 mb-1">Calibrare</p>
                 <div className="flex items-center gap-2">
-                  {calibrationBadge(t.calibration_status)}
+                  {calibrationBadge(t.calibration_status, t)}
                   {t.next_calibration_date && (
-                    <span className="text-xs text-slate-500">Urm: {new Date(t.next_calibration_date).toLocaleDateString('ro-RO')}</span>
+                    <span className="text-xs text-slate-500">Calibrare expira pe: {new Date(t.next_calibration_date).toLocaleDateString('ro-RO')}</span>
                   )}
                 </div>
                 {t.calibrated_by && <p className="text-xs text-slate-400 mt-1">Calibrat de: {t.calibrated_by}</p>}
+                {t.last_calibrated_at && <p className="text-xs text-slate-400">Data calibrare: {new Date(t.last_calibrated_at).toLocaleDateString('ro-RO')}</p>}
               </div>
               <button onClick={() => setShowCalibrate(true)} className="btn-primary text-xs py-1">Calibreaza</button>
             </div>
+            <p className="text-[10px] text-slate-400 mt-2 italic">Data certificare = cand a fost certificat/calibrat instrumentul. Data expirare = pana cand e valabila calibrarea.</p>
+          </div>
+        )}
+
+        {/* Maintenance status */}
+        {t.maintenance_interval_cycles > 0 && (
+          <div className="bg-slate-50 rounded p-3 mb-3">
+            <p className="text-xs font-medium text-slate-600 mb-1">Mentenanta scula</p>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${(t.current_cycles / t.maintenance_interval_cycles) > 0.8 ? 'bg-red-500' : 'bg-blue-500'}`}
+                  style={{ width: `${Math.min(100, Math.round((t.current_cycles / t.maintenance_interval_cycles) * 100))}%` }}
+                />
+              </div>
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                {(t.current_cycles || 0).toLocaleString()}/{t.maintenance_interval_cycles.toLocaleString()} cicluri
+              </span>
+            </div>
+            {(t.current_cycles / t.maintenance_interval_cycles) >= 0.9 && (
+              <p className="text-xs text-amber-600 font-medium">
+                {Math.round((t.current_cycles / t.maintenance_interval_cycles) * 100)}% — programeaza inlocuire/mentenanta
+              </p>
+            )}
           </div>
         )}
 
@@ -530,7 +587,7 @@ export default function ToolsPage() {
             <div className="flex gap-2 flex-wrap">
               <button className={calFilterCls('')} onClick={() => setCalibrationFilter('')}>Toate</button>
               <button className={calFilterCls('valid')} onClick={() => setCalibrationFilter('valid')}>Calibrate</button>
-              <button className={calFilterCls('expiring_soon')} onClick={() => setCalibrationFilter('expiring_soon')}>Expira curand</button>
+              <button className={calFilterCls('expiring_soon')} onClick={() => setCalibrationFilter('expiring_soon')}>Calibrare expira curand</button>
               <button className={calFilterCls('expired')} onClick={() => setCalibrationFilter('expired')}>Expirate</button>
               <button className={calFilterCls('not_applicable')} onClick={() => setCalibrationFilter('not_applicable')}>N/A</button>
             </div>
@@ -586,7 +643,10 @@ export default function ToolsPage() {
                           <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor(t.status)}`}>{t.status}</span>
                         </td>
                         <td className="px-4 py-3">
-                          {calibrationBadge(t.calibration_status || 'not_applicable')}
+                          <div className="flex flex-wrap gap-1">
+                            {calibrationBadge(t.calibration_status || 'not_applicable', t)}
+                            {maintenanceBadge(t)}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
@@ -610,6 +670,11 @@ export default function ToolsPage() {
 
       {tab === 'consumables' && (
         <div>
+          <div className="flex justify-end mb-3">
+            <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 text-sm">
+              <Plus size={15} /> Adauga consumabil
+            </button>
+          </div>
           {cLoading ? <p className="text-slate-400">Se incarca...</p> : (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <table className="w-full text-sm">

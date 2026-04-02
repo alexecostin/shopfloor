@@ -52,7 +52,7 @@ export async function updateMasterPlan(id, data) {
 
 // ─── Capacity Recalculation ───────────────────────────────────────────────────
 
-async function recalculateCapacity(machineId, planDate, masterPlanId) {
+export async function recalculateCapacity(machineId, planDate, masterPlanId) {
   const [{ total }] = await db('planning.daily_allocations')
     .where({ machine_id: machineId, plan_date: planDate })
     .whereNot('status', 'cancelled')
