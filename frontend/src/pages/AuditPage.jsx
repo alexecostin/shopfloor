@@ -165,6 +165,37 @@ function ActionsTab() {
   )
 }
 
+const TABLE_FRIENDLY_NAMES = {
+  'machines.machines': 'Utilaje',
+  'production.reports': 'Rapoarte productie',
+  'production.work_orders': 'Comenzi de lucru',
+  'production.framework_contracts': 'Contracte cadru',
+  'production.bom_products': 'Produse BOM',
+  'production.bom_operations': 'Operatii BOM',
+  'production.bom_materials': 'Materiale BOM',
+  'quality.plans': 'Planuri calitate',
+  'quality.measurements': 'Masurari',
+  'quality.ncr': 'NCR-uri',
+  'quality.capa': 'CAPA',
+  'companies.companies': 'Companii',
+  'inventory.stock': 'Stoc',
+  'inventory.materials': 'Materiale',
+  'documents.documents': 'Documente',
+  'auth.users': 'Utilizatori',
+  'maintenance.tasks': 'Mentenanta',
+  'alerts.rules': 'Reguli alerte',
+  'alerts.alerts': 'Alerte',
+  'checklists.templates': 'Sabloane checklist',
+  'checklists.completions': 'Completari checklist',
+  'costs.elements': 'Elemente cost',
+  'scheduling.schedules': 'Planificari',
+}
+
+function getFriendlyTableName(schema, table) {
+  const key = `${schema}.${table}`
+  return TABLE_FRIENDLY_NAMES[key] || table
+}
+
 function ChangesTab() {
   const [page, setPage] = useState(1)
   const [tableName, setTableName] = useState('')
@@ -201,14 +232,17 @@ function ChangesTab() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Nume tabel</label>
-            <input
-              type="text"
-              placeholder="Ex: machines, orders"
+            <label className="block text-xs font-medium text-slate-600 mb-1">Zona modificata</label>
+            <select
               value={tableName}
               onChange={e => { setTableName(e.target.value); setPage(1); }}
               className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            >
+              <option value="">Toate zonele</option>
+              {Object.entries(TABLE_FRIENDLY_NAMES).map(([key, label]) => (
+                <option key={key} value={key.split('.')[1]}>{label}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Data inceput</label>
@@ -238,7 +272,7 @@ function ChangesTab() {
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Data</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Tabel</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Zona modificata</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Operatie</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Record ID</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Modificat de</th>
@@ -264,7 +298,10 @@ function ChangesTab() {
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                       {new Date(c.changed_at).toLocaleString('ro-RO')}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{c.table_schema}.{c.table_name}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {getFriendlyTableName(c.table_schema, c.table_name)}
+                      <span className="text-xs text-slate-400 ml-1">({c.table_schema}.{c.table_name})</span>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${opColor}`}>
                         {c.operation}

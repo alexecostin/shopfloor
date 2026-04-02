@@ -4,8 +4,9 @@ import api from '../api/client'
 import toast from 'react-hot-toast'
 import {
   ClipboardCheck, Ruler, BarChart3, AlertTriangle, ShieldCheck,
-  Plus, X, Check, XCircle, ChevronDown, Trash2, ArrowRight
+  Plus, X, Check, XCircle, ChevronDown, Trash2, ArrowRight, FileText
 } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 
 const TABS = [
   { key: 'plans', label: 'Planuri control', icon: ClipboardCheck },
@@ -57,6 +58,13 @@ function PlanuriTab() {
     queryFn: () => api.get('/quality/plans', { params: { page, limit: 25 } }).then(r => r.data),
   })
 
+  const { data: productsData } = useQuery({
+    queryKey: ['bom-products-for-plans'],
+    queryFn: () => api.get('/bom/products', { params: { limit: 500 } }).then(r => r.data),
+  })
+  const productsMap = {}
+  ;(productsData?.data || []).forEach(p => { productsMap[p.id] = p })
+
   const createMut = useMutation({
     mutationFn: (body) => api.post('/quality/plans', body),
     onSuccess: () => {
@@ -92,7 +100,7 @@ function PlanuriTab() {
             <thead>
               <tr className="border-b border-slate-200 text-left text-slate-500">
                 <th className="pb-2 pr-4">Nume plan</th>
-                <th className="pb-2 pr-4">Produs ID</th>
+                <th className="pb-2 pr-4">Produs</th>
                 <th className="pb-2 pr-4">Caracteristici</th>
                 <th className="pb-2 pr-4">Activ</th>
                 <th className="pb-2">Creat</th>
@@ -104,7 +112,11 @@ function PlanuriTab() {
                 return (
                   <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="py-2 pr-4 font-medium">{p.plan_name}</td>
-                    <td className="py-2 pr-4 text-xs text-slate-400 font-mono">{p.product_id?.substring(0, 8) || '-'}</td>
+                    <td className="py-2 pr-4 text-xs text-slate-600">
+                      {p.product_id && productsMap[p.product_id]
+                        ? <span><span className="font-mono text-blue-500">{productsMap[p.product_id].reference}</span> - {productsMap[p.product_id].name}</span>
+                        : (p.product_id ? <span className="text-slate-400 font-mono">{p.product_id.substring(0, 8)}</span> : '-')}
+                    </td>
                     <td className="py-2 pr-4">
                       <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">{chars.length} caract.</span>
                     </td>
@@ -141,8 +153,14 @@ function PlanuriTab() {
 }
 
 function CreatePlanModal({ onClose, onSubmit, loading }) {
-  const [form, setForm] = useState({ plan_name: '', product_id: '' })
+  const [form, setForm] = useState({ plan_name: '', product_id: '', order_id: '' })
   const [chars, setChars] = useState([{ name: '', nominal: '', upper_tolerance: '', lower_tolerance: '', unit: 'mm', is_critical: false }])
+
+  const { data: productsData } = useQuery({
+    queryKey: ['bom-products-select'],
+    queryFn: () => api.get('/bom/products', { params: { limit: 500 } }).then(r => r.data),
+  })
+  const products = productsData?.data || []
 
   function addChar() {
     setChars(c => [...c, { name: '', nominal: '', upper_tolerance: '', lower_tolerance: '', unit: 'mm', is_critical: false }])
@@ -184,9 +202,24 @@ function CreatePlanModal({ onClose, onSubmit, loading }) {
               <input className="input w-full" value={form.plan_name} onChange={e => setForm(f => ({ ...f, plan_name: e.target.value }))} />
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Produs ID</label>
-              <input className="input w-full" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} placeholder="UUID produs (optional)" />
+              <label className="block text-sm text-slate-600 mb-1">Produs</label>
+              <select className="input w-full" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))}>
+                <option value="">-- Selecteaza produs (optional) --</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.reference} - {p.name}</option>)}
+              </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">Comanda de lucru (optional)</label>
+            <SearchableSelect
+              endpoint="/work-orders"
+              labelField="work_order_number"
+              valueField="id"
+              placeholder="Selecteaza comanda (optional)"
+              value={form.order_id}
+              onChange={(id) => setForm(f => ({ ...f, order_id: id }))}
+              allowCreate={false}
+            />
           </div>
 
           <div>
@@ -369,6 +402,7 @@ function MeasurementForm({ plans, selectedPlanId, setSelectedPlanId, selectedCha
   const [measValues, setMeasValues] = useState([])
   const [measurementType, setMeasurementType] = useState(initialType || 'inline')
   const [notes, setNotes] = useState('')
+  const [productDocs, setProductDocs] = useState([])
 
   function handlePlanChange(planId) {
     setSelectedPlanId(planId)
@@ -376,8 +410,17 @@ function MeasurementForm({ plans, selectedPlanId, setSelectedPlanId, selectedCha
     if (plan) {
       const chars = typeof plan.characteristics === 'string' ? JSON.parse(plan.characteristics) : (plan.characteristics || [])
       setMeasValues(chars.map(c => ({ name: c.name, measured: '' })))
+      // Fetch documents for the product if available
+      if (plan.product_id) {
+        api.get(`/documents/for/product/${plan.product_id}`).then(r => {
+          setProductDocs(r.data?.data || r.data || [])
+        }).catch(() => setProductDocs([]))
+      } else {
+        setProductDocs([])
+      }
     } else {
       setMeasValues([])
+      setProductDocs([])
     }
   }
 
@@ -437,6 +480,19 @@ function MeasurementForm({ plans, selectedPlanId, setSelectedPlanId, selectedCha
             <input className="input w-full" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
           </div>
         </div>
+
+        {productDocs.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 flex-wrap">
+            <FileText size={16} className="text-amber-600" />
+            <span className="text-sm text-amber-800 font-medium">Desen tehnic:</span>
+            {productDocs.map(doc => (
+              <a key={doc.id} href={doc.file_url || doc.url || '#'} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                {doc.title || doc.file_name || doc.name || 'Document'} [Deschide]
+              </a>
+            ))}
+          </div>
+        )}
 
         {selectedChars.length > 0 && (
           <div>

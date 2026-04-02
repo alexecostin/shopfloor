@@ -1090,7 +1090,12 @@ export default function WorkOrdersPage() {
       )}
 
       {tab === 'calendar' && (
-        <WeekCalendar workOrders={workOrders?.data} machines={machines} />
+        <>
+          <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm text-blue-700">
+            <strong>Scopul acestei pagini:</strong> Vizualizare calendaristica a comenzilor de lucru pe saptamana. Vedeti ce comenzi sunt planificate pe fiecare zi.
+          </div>
+          <WeekCalendar workOrders={workOrders?.data} machines={machines} />
+        </>
       )}
 
       {tab === 'rates' && <HrRatesSection />}

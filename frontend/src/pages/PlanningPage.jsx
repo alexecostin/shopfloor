@@ -1492,7 +1492,7 @@ export default function PlanningPage() {
   const { data: capacity } = useQuery({
     queryKey: ['capacity', capFrom, capTo],
     queryFn: () => api.get('/planning/capacity', { params: { dateFrom: capFrom, dateTo: capTo } }).then(r => r.data),
-    enabled: tab === 'capacity',
+    enabled: tab === 'capacity' && !!capFrom && !!capTo,
   })
 
   // Aggregated pieces from all orders
@@ -2157,6 +2157,9 @@ function CTPTab() {
   const [maxShifts, setMaxShifts] = useState('2')
   const [overtime, setOvertime] = useState('10')
   const [result, setResult] = useState(null)
+
+  // Reset result when parameters change so stale data is not shown
+  useEffect(() => { setResult(null) }, [productRef, quantity, maxShifts, overtime])
 
   const mutation = useMutation({
     mutationFn: (data) => api.post('/planning/ctp', data).then(r => r.data),

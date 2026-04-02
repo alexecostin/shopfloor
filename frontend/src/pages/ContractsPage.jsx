@@ -43,13 +43,9 @@ function CreateContractModal({ onClose }) {
   const [form, setForm] = useState({
     clientId: null,
     contractNumber: '',
-    productReference: '',
-    productName: '',
-    totalQuantity: '',
-    unitPrice: '',
+    products: [{ productReference: '', productName: '', quantityPerDelivery: '', unitPrice: '' }],
     currency: 'RON',
     deliveryFrequency: 'monthly',
-    quantityPerDelivery: '',
     startDate: '',
     endDate: '',
     notes: '',
@@ -69,11 +65,30 @@ function CreateContractModal({ onClose }) {
     },
   })
 
-  const canSave = form.clientId && form.contractNumber && form.totalQuantity && form.quantityPerDelivery && form.startDate && form.endDate
+  const addProduct = () => setForm(f => ({
+    ...f,
+    products: [...f.products, { productReference: '', productName: '', quantityPerDelivery: '', unitPrice: '' }]
+  }))
+
+  const removeProduct = (idx) => setForm(f => ({
+    ...f,
+    products: f.products.filter((_, i) => i !== idx)
+  }))
+
+  const updateProduct = (idx, field, value) => setForm(f => ({
+    ...f,
+    products: f.products.map((p, i) => i === idx ? { ...p, [field]: value } : p)
+  }))
+
+  // Calculate totals from products
+  const totalQtyPerDelivery = form.products.reduce((sum, p) => sum + (Number(p.quantityPerDelivery) || 0), 0)
+  // Estimate total based on frequency and period
+  const hasProducts = form.products.some(p => p.productReference || p.productName)
+  const canSave = form.clientId && form.contractNumber && totalQtyPerDelivery > 0 && form.startDate && form.endDate
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-800">Contract cadru nou</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
@@ -99,34 +114,60 @@ function CreateContractModal({ onClose }) {
                 onChange={e => setForm(f => ({ ...f, contractNumber: e.target.value }))} />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Referinta produs</label>
-              <input className="input" placeholder="Ex: AXL-500" value={form.productReference}
-                onChange={e => setForm(f => ({ ...f, productReference: e.target.value }))} />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Denumire produs</label>
-            <input className="input" placeholder="Ex: Ax principal 500mm" value={form.productName}
-              onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Cantitate totala *</label>
-              <input className="input" type="number" placeholder="Ex: 12000" value={form.totalQuantity}
-                onChange={e => setForm(f => ({ ...f, totalQuantity: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Pret unitar</label>
-              <input className="input" type="number" step="0.01" placeholder="Ex: 45.00" value={form.unitPrice}
-                onChange={e => setForm(f => ({ ...f, unitPrice: e.target.value }))} />
-            </div>
-            <div>
               <label className="block text-xs text-slate-500 mb-1">Moneda</label>
               <select className="input" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
                 {['RON', 'EUR', 'USD', 'GBP', 'HUF'].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
+
+          {/* Multi-product section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-700">Produse in contract</label>
+              <button type="button" onClick={addProduct} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+                <Plus size={12} /> Adauga produs
+              </button>
+            </div>
+            <div className="space-y-2">
+              {form.products.map((p, idx) => (
+                <div key={idx} className="flex items-end gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-400 mb-0.5">Referinta produs</label>
+                    <input className="input w-full" placeholder="Ex: AXL-500" value={p.productReference}
+                      onChange={e => updateProduct(idx, 'productReference', e.target.value)} />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-400 mb-0.5">Denumire produs</label>
+                    <input className="input w-full" placeholder="Ex: Ax principal" value={p.productName}
+                      onChange={e => updateProduct(idx, 'productName', e.target.value)} />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-xs text-slate-400 mb-0.5">Cant./livrare *</label>
+                    <input className="input w-full" type="number" placeholder="1000" value={p.quantityPerDelivery}
+                      onChange={e => updateProduct(idx, 'quantityPerDelivery', e.target.value)} />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-xs text-slate-400 mb-0.5">Pret unitar</label>
+                    <input className="input w-full" type="number" step="0.01" placeholder="45.00" value={p.unitPrice}
+                      onChange={e => updateProduct(idx, 'unitPrice', e.target.value)} />
+                  </div>
+                  {form.products.length > 1 && (
+                    <button type="button" onClick={() => removeProduct(idx)} className="text-slate-400 hover:text-red-500 mb-1">
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {totalQtyPerDelivery > 0 && (
+              <p className="text-xs text-slate-500 mt-2">
+                Total cantitate per livrare: <strong>{totalQtyPerDelivery.toLocaleString('ro-RO')}</strong>
+                {form.products.length > 1 && ` (${form.products.length} produse)`}
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Frecventa livrare *</label>
@@ -137,9 +178,10 @@ function CreateContractModal({ onClose }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Cantitate per livrare *</label>
-              <input className="input" type="number" placeholder="Ex: 1000" value={form.quantityPerDelivery}
-                onChange={e => setForm(f => ({ ...f, quantityPerDelivery: e.target.value }))} />
+              <label className="block text-xs text-slate-500 mb-1">Cantitate totala contract</label>
+              <input className="input" type="number" placeholder="Ex: 12000 (total pe durata contractului)"
+                value={form.totalQuantity || ''}
+                onChange={e => setForm(f => ({ ...f, totalQuantity: e.target.value }))} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -165,9 +207,19 @@ function CreateContractModal({ onClose }) {
           <button
             onClick={() => mutation.mutate({
               ...form,
-              totalQuantity: Number(form.totalQuantity),
-              unitPrice: form.unitPrice ? Number(form.unitPrice) : null,
-              quantityPerDelivery: Number(form.quantityPerDelivery),
+              totalQuantity: Number(form.totalQuantity) || totalQtyPerDelivery * 12,
+              quantityPerDelivery: totalQtyPerDelivery,
+              products: form.products
+                .filter(p => p.productReference || p.productName)
+                .map(p => ({
+                  ...p,
+                  quantityPerDelivery: Number(p.quantityPerDelivery) || 0,
+                  unitPrice: p.unitPrice ? Number(p.unitPrice) : null,
+                })),
+              // Backward compat for single product
+              productReference: form.products.length === 1 ? form.products[0].productReference : undefined,
+              productName: form.products.length === 1 ? form.products[0].productName : undefined,
+              unitPrice: form.products.length === 1 && form.products[0].unitPrice ? Number(form.products[0].unitPrice) : null,
             })}
             disabled={mutation.isPending || !canSave}
             className="btn-primary"
@@ -195,8 +247,13 @@ function ContractDetailModal({ contractId, onClose }) {
     onSuccess: (res) => {
       qc.invalidateQueries(['framework-contract', contractId])
       qc.invalidateQueries(['framework-contracts'])
-      const wo = res.data
-      toast.success(`Comanda de lucru ${wo.work_order_number} generata cu succes.`)
+      const data = res.data
+      if (Array.isArray(data)) {
+        const numbers = data.map(wo => wo.work_order_number).join(', ')
+        toast.success(`${data.length} comenzi de lucru generate: ${numbers}`)
+      } else {
+        toast.success(`Comanda de lucru ${data.work_order_number} generata cu succes.`)
+      }
     },
     onError: (e) => {
       const msg = e.response?.data?.message || ''
@@ -245,6 +302,40 @@ function ContractDetailModal({ contractId, onClose }) {
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
+
+        {/* Multi-product list */}
+        {(() => {
+          let prods = []
+          try { prods = typeof contract.products === 'string' ? JSON.parse(contract.products) : (contract.products || []) } catch {}
+          if (prods.length > 1) return (
+            <div className="mb-5">
+              <h4 className="text-sm font-semibold text-slate-700 mb-2">Produse in contract ({prods.length})</h4>
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Referinta</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Denumire</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Cant./livrare</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-slate-600">Pret unitar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {prods.map((p, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-mono text-xs text-blue-500">{p.productReference || '-'}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{p.productName || '-'}</td>
+                        <td className="px-3 py-2 text-right text-xs">{Number(p.quantityPerDelivery || 0).toLocaleString('ro-RO')}</td>
+                        <td className="px-3 py-2 text-right text-xs">{p.unitPrice ? formatMoney(Number(p.unitPrice), contract.currency || 'RON') : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+          return null
+        })()}
 
         {/* Contract info cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -429,8 +520,15 @@ export default function ContractsPage() {
                 <td className="px-4 py-3 font-mono text-xs text-blue-600">{c.contract_number}</td>
                 <td className="px-4 py-3 text-slate-800">{c.client_name || '-'}</td>
                 <td className="px-4 py-3 text-xs text-slate-600">
-                  {c.product_reference && <span className="font-mono text-blue-500 mr-1">{c.product_reference}</span>}
-                  {c.product_name || '-'}
+                  {(() => {
+                    let prods = []
+                    try { prods = typeof c.products === 'string' ? JSON.parse(c.products) : (c.products || []) } catch {}
+                    if (prods.length > 1) return <span>{prods.length} produse</span>
+                    return <>
+                      {c.product_reference && <span className="font-mono text-blue-500 mr-1">{c.product_reference}</span>}
+                      {c.product_name || '-'}
+                    </>
+                  })()}
                 </td>
                 <td className="px-4 py-3 text-right font-medium text-slate-800">{Number(c.total_quantity || 0).toLocaleString('ro-RO')}</td>
                 <td className="px-4 py-3 text-right text-slate-600">{Number(c.quantity_per_delivery || 0).toLocaleString('ro-RO')}</td>

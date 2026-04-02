@@ -452,7 +452,7 @@ function VerificationsEditor({ items, onChange }) {
 // OPERATION DETAIL DRAWER (modal/side panel)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function OperationDetailDrawer({ operation, machines, productId, onSaved, onClose, onDelete }) {
+function OperationDetailDrawer({ operation, machines, productId, allOperations, onSaved, onClose, onDelete }) {
   const [form, setForm] = useState({
     operation_name: operation.operation_name || '',
     operation_type: operation.operation_type || '',
@@ -484,6 +484,34 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
     scrap_percent: operation.scrap_percent || '',
     scrap_type: operation.scrap_type || '',
     scrap_value_per_kg: operation.scrap_value_per_kg || '',
+  })
+
+  // Determine if this is the first operation (lowest sequence)
+  const sortedOps = useMemo(() => (allOperations || []).slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0)), [allOperations])
+  const isFirstOperation = sortedOps.length === 0 || sortedOps[0]?.id === operation.id
+  const previousOp = useMemo(() => {
+    if (isFirstOperation || sortedOps.length === 0) return null
+    const idx = sortedOps.findIndex(o => o.id === operation.id)
+    return idx > 0 ? sortedOps[idx - 1] : null
+  }, [sortedOps, operation.id, isFirstOperation])
+
+  // Filter machines by operation type compatibility
+  const [showAllMachines, setShowAllMachines] = useState(false)
+  const compatibleMachines = useMemo(() => {
+    if (!machines) return []
+    return machines.filter(m => m.type === form.machine_type || m.type === form.operation_type)
+  }, [machines, form.machine_type, form.operation_type])
+  const otherMachines = useMemo(() => {
+    if (!machines) return []
+    const compatIds = new Set(compatibleMachines.map(m => m.id))
+    return machines.filter(m => !compatIds.has(m.id))
+  }, [machines, compatibleMachines])
+
+  // Documents for product (for drawing section)
+  const { data: productDocs } = useQuery({
+    queryKey: ['product-documents', productId],
+    queryFn: () => api.get(`/documents/for/product/${productId}`).then(r => r.data),
+    enabled: !!productId,
   })
 
   // BOM material linking state
@@ -622,7 +650,14 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
               <label className="text-xs text-slate-500 mb-1 block">Masina (sau trage din panoul drept)</label>
               <select className="input text-sm" value={form.machine_id} onChange={f('machine_id')}>
                 <option value="">Nealocata</option>
-                {(machines || []).map(m => <option key={m.id} value={m.id}>{m.code} - {m.name}</option>)}
+                {compatibleMachines.length > 0 && <optgroup label="Masini compatibile">
+                  {compatibleMachines.map(m => <option key={m.id} value={m.id}>{m.code} - {m.name}</option>)}
+                </optgroup>}
+                {(compatibleMachines.length === 0 ? (machines || []) : otherMachines).length > 0 && (
+                  <optgroup label={compatibleMachines.length > 0 ? 'Alte masini' : 'Toate masinile'}>
+                    {(compatibleMachines.length === 0 ? (machines || []) : otherMachines).map(m => <option key={m.id} value={m.id}>{m.code} - {m.name}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div>
@@ -773,7 +808,13 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
           </div>
 
           {/* Material from inventory + BOM linking */}
-          {productId && (
+          {productId && !isFirstOperation && previousOp && (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <label className="text-xs font-medium text-slate-600 block mb-1">Material intrare</label>
+              <p className="text-sm text-slate-700">Semifabricat de la Op{previousOp.sequence} {previousOp.operation_name || previousOp.operation_type || ''}</p>
+            </div>
+          )}
+          {productId && isFirstOperation && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
               <label className="text-xs font-medium text-blue-700 block">Legare material din inventar (BOM)</label>
               <SearchableSelect
@@ -822,7 +863,35 @@ function OperationDetailDrawer({ operation, machines, productId, onSaved, onClos
 
           {/* Drawing */}
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Desen tehnic (URL)</label>
+            <label className="text-xs text-slate-500 mb-1 block">Desen tehnic</label>
+            {productDocs && productDocs.length > 0 && (
+              <div className="mb-2 space-y-1">
+                {productDocs.filter(d => d.document_type === 'drawing' || d.title?.toLowerCase().includes('desen')).slice(0, 5).map(d => (
+                  <div key={d.id} className="flex items-center gap-2">
+                    <a
+                      href={d.current_file_path ? `/${d.current_file_path}` : '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <Eye size={12} /> {d.title} {d.current_revision_code ? `(Rev. ${d.current_revision_code})` : ''}
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+            {form.drawing_url && (
+              <div className="mb-2">
+                <a
+                  href={form.drawing_url.startsWith('http') ? form.drawing_url : `/${form.drawing_url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <Eye size={12} /> Deschide desen
+                </a>
+              </div>
+            )}
             <input className="input text-sm" placeholder="URL desen tehnic sau referinta fisier" value={form.drawing_url} onChange={f('drawing_url')} />
           </div>
 
@@ -1946,6 +2015,7 @@ function MBOMVisualEditor({ orderId, onBack }) {
           operation={selectedOp}
           machines={machines}
           productId={mbom?.product?.id}
+          allOperations={allOperations}
           onSaved={() => { refetch(); setSelectedOp(null) }}
           onClose={() => setSelectedOp(null)}
           onDelete={(id) => deleteOpMut.mutate(id)}

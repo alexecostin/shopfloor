@@ -297,6 +297,10 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-4">
+      <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm text-blue-700">
+        <strong>Scopul acestei pagini:</strong> Alertele sunt generate automat de sistem cand detecteaza probleme: stoc minim, OEE scazut, mentenanta necesara, comenzi la risc. Configurati regulile de alerta si canalele de notificare.
+      </div>
+
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-slate-800 mb-6">Alerte</h1>
         {totalCount != null && totalCount > 0 && (

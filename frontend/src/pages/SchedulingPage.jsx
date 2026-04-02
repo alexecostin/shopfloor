@@ -807,12 +807,12 @@ function SimulationsTab() {
                 const payload = {
                   name: simForm.name,
                   description: simForm.description,
-                  scenario_params: {
+                  periodStart: simForm.period_from || undefined,
+                  periodEnd: simForm.period_to || undefined,
+                  constraintsModified: {
                     disabled_machines: simForm.disabled_machines,
                     urgent_orders: simForm.urgent_orders,
                     allow_overtime: simForm.allow_overtime,
-                    period_from: simForm.period_from || undefined,
-                    period_to: simForm.period_to || undefined,
                   },
                 }
                 createMut.mutate(payload)

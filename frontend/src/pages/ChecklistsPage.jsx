@@ -274,6 +274,9 @@ export default function ChecklistsPage() {
 
       {tab === 'templates' && (
         <div className="grid gap-3">
+          <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm text-blue-700">
+            <strong>Scopul acestei pagini:</strong> Definiti sabloane de verificare pe care operatorii le completeaza la inceputul turelor, la schimbarea produsului sau la inspectii periodice. Fiecare sablon contine o lista de puncte de verificat.
+          </div>
           {isLoading && <p className="text-slate-400 text-sm">Se incarca...</p>}
           {templates?.map(t => (
             <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
@@ -299,6 +302,10 @@ export default function ChecklistsPage() {
       )}
 
       {tab === 'completions' && (
+        <>
+        <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm text-blue-700">
+          <strong>Scopul acestei pagini:</strong> Istoricul completarilor de checklist-uri de catre operatori. Verificati ca toate punctele sunt bifate si identificati problemele raportate.
+        </div>
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
@@ -325,6 +332,7 @@ export default function ChecklistsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {createModal && <TemplateModal onClose={() => setCreateModal(false)} />}

@@ -96,8 +96,8 @@ function SavedReports({ onLoad }) {
             <option value="prr_machine">Per Masina</option>
             <option value="prr_order">Per Comanda</option>
             <option value="prr_operator">Per Operator</option>
-            <option value="weekly">Saptamanal</option>
-            <option value="monthly">Lunar</option>
+            <option value="prr_weekly_summary">Saptamanal</option>
+            <option value="month_comparison">Lunar</option>
           </select>
         </div>
         <div>
@@ -110,10 +110,10 @@ function SavedReports({ onLoad }) {
         </div>
         <button
           onClick={() => {
-            const params = {}
-            if (paramDateFrom) params.dateFrom = paramDateFrom
-            if (paramDateTo) params.dateTo = paramDateTo
-            saveMut.mutate({ name, type: saveType, params })
+            const filters = {}
+            if (paramDateFrom) filters.dateFrom = paramDateFrom
+            if (paramDateTo) filters.dateTo = paramDateTo
+            saveMut.mutate({ name, report_type: saveType, filters })
           }}
           disabled={saveMut.isPending || !name || !saveType}
           className="btn-secondary text-sm flex items-center gap-1"
@@ -137,8 +137,8 @@ function SavedReports({ onLoad }) {
               {reports.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{r.type || '-'}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{formatParamsDisplay(r.params)}</td>
+                  <td className="px-4 py-3 text-slate-600">{r.report_type || r.type || '-'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">{formatParamsDisplay(r.filters || r.params)}</td>
                   <td className="px-4 py-3 text-center space-x-2">
                     <button onClick={() => onLoad && onLoad(r)} className="text-xs text-blue-600 hover:underline">Incarca</button>
                     <button onClick={() => { if (window.confirm('Stergi raportul salvat?')) deleteMut.mutate(r.id) }} className="text-xs text-red-500 hover:text-red-700 inline-flex items-center gap-0.5">
@@ -333,15 +333,16 @@ export default function ReportsPage() {
   const trendList = trend.data?.data || trend.data || []
 
   function handleLoadSaved(report) {
-    const p = report.params || {}
+    const p = report.filters || report.params || {}
     if (p.dateFrom) setDateFrom(p.dateFrom)
     if (p.dateTo) setDateTo(p.dateTo)
     if (p.product) setProduct(p.product)
     if (p.week) setWeek(p.week)
     if (p.month) setMonth(p.month)
     if (p.year) setYear(p.year)
-    const typeMap = { prr_product: 'product', prr_machine: 'machine', prr_order: 'byOrder', prr_operator: 'byOperator', weekly: 'weekly', monthly: 'monthly' }
-    if (typeMap[report.type]) setTab(typeMap[report.type])
+    const typeMap = { prr_product: 'product', prr_machine: 'machine', prr_order: 'byOrder', prr_operator: 'byOperator', prr_weekly_summary: 'weekly', month_comparison: 'monthly', weekly: 'weekly', monthly: 'monthly' }
+    const rt = report.report_type || report.type
+    if (typeMap[rt]) setTab(typeMap[rt])
     toast.success(`Raport "${report.name}" incarcat.`)
   }
 

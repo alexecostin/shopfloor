@@ -4,7 +4,7 @@ import api from '../api/client'
 import toast from 'react-hot-toast'
 import SearchableSelect from '../components/SearchableSelect'
 import {
-  FileText, Plus, X, Search, Upload, Link2, Eye,
+  FileText, Plus, X, Search, Upload, Link2, Eye, Download,
   File, FileImage, FileSpreadsheet, FileCheck,
   BookOpen, ClipboardList, Award, BarChart3, Settings2, Tag
 } from 'lucide-react'
@@ -378,14 +378,32 @@ function DocumentDetailModal({ documentId, onClose }) {
           }
           if (isPdfMime(current.mime_type) && current.file_path) {
             return (
-              <div className="mb-5">
+              <div className="mb-5 space-y-2">
+                <iframe
+                  src={`/${current.file_path}`}
+                  title={current.file_name}
+                  className="w-full h-64 border border-slate-200 rounded-lg"
+                />
                 <a
                   href={`/${current.file_path}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
                 >
-                  <FileText size={14} /> Deschide PDF: {current.file_name}
+                  <FileText size={14} /> Deschide PDF in tab nou: {current.file_name}
+                </a>
+              </div>
+            )
+          }
+          if (current.file_path) {
+            return (
+              <div className="mb-5">
+                <a
+                  href={`/${current.file_path}`}
+                  download={current.file_name}
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  <Download size={14} /> Descarca: {current.file_name}
                 </a>
               </div>
             )

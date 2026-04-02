@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, X, FileText, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Pencil, X, FileText, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 
 const SEVERITY_OPTIONS = [
   { value: 'info', label: 'Info' },
@@ -12,6 +13,7 @@ const SEVERITY_OPTIONS = [
 
 const emptyForm = {
   title: '',
+  workOrderId: '',
   productId: '',
   operationId: '',
   machineType: '',
@@ -36,6 +38,7 @@ function InstructionModal({ onClose, editItem }) {
       const tols = typeof editItem.tolerances === 'string' ? JSON.parse(editItem.tolerances) : (editItem.tolerances || [])
       return {
         title: editItem.title || '',
+        workOrderId: editItem.work_order_id || '',
         productId: editItem.product_id || '',
         operationId: editItem.operation_id || '',
         machineType: editItem.machine_type || '',
@@ -51,6 +54,7 @@ function InstructionModal({ onClose, editItem }) {
     }
     return { ...emptyForm }
   })
+  const [productDocs, setProductDocs] = useState([])
 
   const f = (k) => (e) => setForm({ ...form, [k]: e.target ? e.target.value : e })
 
@@ -69,9 +73,16 @@ function InstructionModal({ onClose, editItem }) {
   })
   const operations = operationsData || []
 
-  // Reset operation when product changes
+  // Reset operation when product changes and fetch related documents
   useEffect(() => {
     if (!isEdit) setForm(prev => ({ ...prev, operationId: '' }))
+    if (form.productId) {
+      api.get(`/documents/for/product/${form.productId}`).then(r => {
+        setProductDocs(r.data?.data || r.data || [])
+      }).catch(() => setProductDocs([]))
+    } else {
+      setProductDocs([])
+    }
   }, [form.productId])
 
   const mutation = useMutation({
@@ -123,16 +134,49 @@ function InstructionModal({ onClose, editItem }) {
         <div className="space-y-3">
           <input className="input" placeholder="Titlu *" value={form.title} onChange={f('title')} />
 
-          <div className="grid grid-cols-2 gap-3">
-            <select className="input" value={form.productId} onChange={f('productId')}>
-              <option value="">-- Produs (optional) --</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.reference} - {p.name}</option>)}
-            </select>
-            <select className="input" value={form.operationId} onChange={f('operationId')}>
-              <option value="">-- Operatie (optional) --</option>
-              {operations.map(o => <option key={o.id} value={o.id}>{o.operation_name}</option>)}
-            </select>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Comanda de lucru</label>
+            <SearchableSelect
+              endpoint="/work-orders"
+              labelField="work_order_number"
+              valueField="id"
+              placeholder="Selecteaza comanda (optional)"
+              value={form.workOrderId}
+              onChange={(id) => setForm(prev => ({ ...prev, workOrderId: id || '' }))}
+              allowCreate={false}
+            />
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Produs</label>
+              <select className="input" value={form.productId} onChange={f('productId')}>
+                <option value="">-- Produs (optional) --</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.reference} - {p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Operatie</label>
+              <select className="input" value={form.operationId} onChange={f('operationId')}>
+                <option value="">-- Operatie (optional) --</option>
+                {operations.map(o => <option key={o.id} value={o.id}>{o.operation_name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {productDocs.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <label className="block text-xs font-medium text-amber-800 mb-2">Desene tehnice asociate produsului</label>
+              <div className="flex flex-wrap gap-2">
+                {productDocs.map(doc => (
+                  <a key={doc.id} href={doc.file_url || doc.url || '#'} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline bg-white rounded px-2 py-1 border border-amber-200">
+                    <ExternalLink size={12} /> {doc.title || doc.file_name || doc.name || 'Document'}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <input className="input" placeholder="Tip masina (optional)" value={form.machineType} onChange={f('machineType')} />

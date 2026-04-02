@@ -51,7 +51,7 @@ function ReportModal({ machines, orders, onClose }) {
             <label className="block text-xs font-medium text-slate-600 mb-1">Comanda asociata</label>
             <select className="input" value={form.orderId} onChange={e => setForm({ ...form, orderId: e.target.value })}>
               <option value="">Fara comanda (optional)</option>
-              {orders?.filter(o => o.status === 'active').map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.product_name}</option>)}
+              {orders?.filter(o => o.status === 'active' || o.status === 'planned').map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.product_name}</option>)}
             </select>
             <p className="text-[11px] text-slate-400 mt-0.5">Selecteaza comanda activa pentru a lega raportul de o comanda de productie</p>
           </div>
@@ -495,7 +495,7 @@ function ShiftsTab({ machines }) {
             {shiftList.map(s => (
               <tr key={s.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 text-slate-700">{s.shift}</td>
-                <td className="px-4 py-3 text-xs font-mono text-slate-600">{s.machine_name || s.machine_id?.slice(0, 8) || '—'}</td>
+                <td className="px-4 py-3 text-xs font-mono text-slate-600">{s.machine_name || (() => { const m = machines?.find(ma => ma.id === s.machine_id); return m ? `${m.code} — ${m.name}` : s.machine_id?.slice(0, 8); })() || '—'}</td>
                 <td className="px-4 py-3 text-slate-600 text-xs">{s.operator_name || s.operator_id?.slice(0, 8) || '—'}</td>
                 <td className="px-4 py-3 text-slate-400 text-xs">{s.started_at ? new Date(s.started_at).toLocaleString('ro-RO') : s.created_at ? new Date(s.created_at).toLocaleString('ro-RO') : '—'}</td>
                 <td className="px-4 py-3">
@@ -549,7 +549,7 @@ function ShiftsTab({ machines }) {
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setOpenModal(false)} className="btn-secondary">Anuleaza</button>
               <button
-                onClick={() => openShift.mutate(openForm)}
+                onClick={() => openShift.mutate({ shiftName: openForm.shift, machineId: openForm.machineId || undefined, operatorId: openForm.operatorId || undefined })}
                 disabled={openShift.isPending || !openForm.machineId}
                 className="btn-primary"
               >
@@ -578,7 +578,7 @@ function ShiftsTab({ machines }) {
             <div className="flex gap-2 mt-5 justify-end">
               <button onClick={() => setCloseModal(null)} className="btn-secondary">Anuleaza</button>
               <button
-                onClick={() => closeShift.mutate({ id: closeModal.id, data: { status: 'closed', endQty: Number(closeForm.endQty) || 0, scrapQty: Number(closeForm.scrapQty) || 0 } })}
+                onClick={() => closeShift.mutate({ id: closeModal.id, data: { notesOutgoing: `Cantitate finala: ${closeForm.endQty || 0}, Rebuturi: ${closeForm.scrapQty || 0}` } })}
                 disabled={closeShift.isPending}
                 className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
               >
@@ -603,7 +603,8 @@ export default function ProductionPage() {
   const isManager = ['admin', 'production_manager'].includes(user?.role)
 
   const { data: machines } = useQuery({ queryKey: ['machines'], queryFn: () => api.get('/machines').then(r => r.data.data) })
-  const { data: orders } = useQuery({ queryKey: ['orders'], queryFn: () => api.get('/production/orders').then(r => r.data.data) })
+  const { data: orders } = useQuery({ queryKey: ['orders'], queryFn: () => api.get('/production/orders').then(r => { const d = r.data; return d?.data || (Array.isArray(d) ? d : []) }) })
+  const { data: workOrders } = useQuery({ queryKey: ['work-orders-prod'], queryFn: () => api.get('/work-orders', { params: { limit: 200 } }).then(r => { const d = r.data; return d?.data || (Array.isArray(d) ? d : []) }) })
   const { data: reports, isLoading: rLoading } = useQuery({ queryKey: ['reports'], queryFn: () => api.get('/production/reports').then(r => r.data), enabled: tab === 'reports' })
   const { data: stops, isLoading: sLoading } = useQuery({ queryKey: ['stops'], queryFn: () => api.get('/production/stops').then(r => r.data), enabled: tab === 'stops' })
 
@@ -670,7 +671,7 @@ export default function ProductionPage() {
               {rLoading && <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">Se incarca...</td></tr>}
               {reports?.data?.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.machine_id.slice(0, 8)}…</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{(() => { const m = machines?.find(ma => ma.id === r.machine_id); return m ? `${m.code} — ${m.name}` : r.machine_id?.slice(0, 8) + '…'; })()}</td>
                   <td className="px-4 py-3 text-slate-700">{r.shift}</td>
                   <td className="px-4 py-3 text-right text-green-600 font-medium">{r.good_pieces}</td>
                   <td className="px-4 py-3 text-right text-red-500 font-medium">{r.scrap_pieces}</td>
@@ -765,7 +766,7 @@ export default function ProductionPage() {
 
       {tab === 'shifts' && <ShiftsTab machines={machines} />}
 
-      {modal === 'report' && <ReportModal machines={machines} orders={orders} onClose={() => setModal(null)} />}
+      {modal === 'report' && <ReportModal machines={machines} orders={orders?.length ? orders : workOrders} onClose={() => setModal(null)} />}
       {modal === 'stop' && <StopModal machines={machines} onClose={() => setModal(null)} />}
       {modal === 'new-order' && <NewOrderModal onClose={() => setModal(null)} />}
       {orderDetail && (

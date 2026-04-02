@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -26,8 +26,12 @@ function MachineSetupTab() {
     queryKey: ['setup-machine', machineId],
     queryFn: () => api.get(`/setup/machines/${machineId}`).then(r => r.data),
     enabled: !!machineId,
-    onSuccess: data => { if (data?.default_setup_time != null) setDefaultTime(String(data.default_setup_time)) },
   })
+
+  // Sync default time from query data
+  useEffect(() => {
+    if (machineSetup?.default_setup_time != null) setDefaultTime(String(machineSetup.default_setup_time))
+  }, [machineSetup])
 
   const { data: overrides = [], isLoading: loadingOverrides } = useQuery({
     queryKey: ['setup-overrides', machineId],

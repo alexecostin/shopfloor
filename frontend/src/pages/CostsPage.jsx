@@ -479,15 +479,16 @@ function ProfitabilityTab({ tenantCurrency }) {
 /* ── Calculatoare Tab ── */
 
 function CalculatorsTab({ tenantCurrency }) {
+  const calcDescription = "Calculeaza costul estimat per piesa sau per comanda bazat pe BOM, timpi operatii, costuri masini si manopera."
   const [calcType, setCalcType] = useState('piece')
 
   const { data: products } = useQuery({
-    queryKey: ['products-list'],
-    queryFn: () => api.get('/products').then(r => r.data?.data || r.data || []),
+    queryKey: ['bom-products-calc'],
+    queryFn: () => api.get('/bom/products', { params: { limit: 500 } }).then(r => r.data?.data || r.data || []),
   })
   const { data: orders } = useQuery({
-    queryKey: ['production-orders'],
-    queryFn: () => api.get('/production/orders').then(r => r.data?.data || r.data || []),
+    queryKey: ['work-orders-calc'],
+    queryFn: () => api.get('/work-orders').then(r => r.data?.data || r.data || []),
   })
 
   const [selectedProduct, setSelectedProduct] = useState('')
@@ -557,6 +558,9 @@ function CalculatorsTab({ tenantCurrency }) {
 
   return (
     <div className="space-y-4">
+      <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm text-blue-700">
+        <strong>Scopul acestei pagini:</strong> {calcDescription}
+      </div>
       <div className="flex gap-2">
         <button className={subTabCls('piece')} onClick={() => setCalcType('piece')}>Cost per piesa</button>
         <button className={subTabCls('order')} onClick={() => setCalcType('order')}>Cost per comanda</button>
@@ -567,7 +571,7 @@ function CalculatorsTab({ tenantCurrency }) {
         <div className="space-y-3">
           <select className="input max-w-xs" value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)}>
             <option value="">Selecteaza produs...</option>
-            {productList.map(p => <option key={p.id} value={p.id}>{p.name || p.product_name || `#${p.id}`}</option>)}
+            {productList.map(p => <option key={p.id} value={p.id}>{p.reference ? `${p.reference} - ` : ''}{p.name || p.product_name || `#${p.id}`}</option>)}
           </select>
           {pieceCost.isLoading && <p className="text-slate-400">Se calculeaza...</p>}
           {pieceCost.data && <BreakdownTable data={pieceCost.data.breakdown || pieceCost.data} />}
@@ -578,7 +582,7 @@ function CalculatorsTab({ tenantCurrency }) {
         <div className="space-y-3">
           <select className="input max-w-xs" value={selectedOrder} onChange={e => setSelectedOrder(e.target.value)}>
             <option value="">Selecteaza comanda...</option>
-            {orderList.map(o => <option key={o.id} value={o.id}>{o.order_number || o.name || `#${o.id}`}</option>)}
+            {orderList.map(o => <option key={o.id} value={o.id}>{o.work_order_number || o.order_number || o.name || `#${o.id}`}</option>)}
           </select>
           {orderCost.isLoading && <p className="text-slate-400">Se calculeaza...</p>}
           {orderCost.data && <BreakdownTable data={orderCost.data.breakdown || orderCost.data} />}
@@ -710,7 +714,7 @@ export default function CostsPage() {
               <label className="block text-xs font-medium text-slate-600 mb-1">Comanda de productie</label>
               <select className="input max-w-xs" value={orderId} onChange={e => setOrderId(e.target.value)}>
                 <option value="">Selecteaza comanda...</option>
-              {orderList.map(o => <option key={o.id} value={o.id}>{o.order_number || o.name || `#${o.id}`}</option>)}
+              {orderList.map(o => <option key={o.id} value={o.id}>{o.work_order_number || o.order_number || o.name || `#${o.id}`}</option>)}
               </select>
             </div>
             {orderId && (
