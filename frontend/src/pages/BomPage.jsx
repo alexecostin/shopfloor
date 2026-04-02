@@ -1520,6 +1520,7 @@ function MBOMVisualEditor({ orderId, onBack }) {
     enabled: !!orderId,
   })
   const [showDocPanel, setShowDocPanel] = useState(false)
+  const [showTree, setShowTree] = useState(false)
 
   // ─── Mutations ────────────────────────────────────────────────────────────
 
@@ -1966,6 +1967,12 @@ function MBOMVisualEditor({ orderId, onBack }) {
               <button className="btn-secondary text-sm flex items-center gap-1.5">
                 <Download size={14} /> Export PDF
               </button>
+              <button
+                onClick={() => setShowTree(true)}
+                className="btn-secondary text-sm flex items-center gap-1.5"
+              >
+                <GitBranch size={14} /> Arbore BOM
+              </button>
               {product.approval_status !== 'active' && (
                 <>
                   <button
@@ -2030,6 +2037,9 @@ function MBOMVisualEditor({ orderId, onBack }) {
           onClose={() => setShowNewOp(null)}
           onCreated={refetch}
         />
+      )}
+      {showTree && product && (
+        <ProductTreeModal productId={product.id} productName={product.name} onClose={() => setShowTree(false)} />
       )}
     </DndContext>
   )
