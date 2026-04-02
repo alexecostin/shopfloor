@@ -239,15 +239,25 @@ function CreatePlanModal({ onClose, onSubmit, loading }) {
                 <Plus size={12} /> Adauga
               </button>
             </div>
+            {/* Column headers */}
+            <div className="flex gap-2 items-center text-[10px] font-medium text-slate-500 mb-1">
+              <div className="flex-1">Nume *</div>
+              <div className="w-20">Nominal</div>
+              <div className="w-16">+Tol</div>
+              <div className="w-16">-Tol</div>
+              <div className="w-14">UM</div>
+              <div className="w-14">Critic</div>
+              <div className="w-6" /> {/* delete */}
+            </div>
             <div className="space-y-2">
               {chars.map((ch, idx) => (
                 <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <input className="input flex-1 text-xs" placeholder="Nume" value={ch.name} onChange={e => updateChar(idx, 'name', e.target.value)} />
-                  <input type="number" step="any" className="input w-20 text-xs" placeholder="Nominal" value={ch.nominal} onChange={e => updateChar(idx, 'nominal', e.target.value)} />
-                  <input type="number" step="any" className="input w-16 text-xs" placeholder="+Tol" value={ch.upper_tolerance} onChange={e => updateChar(idx, 'upper_tolerance', e.target.value)} />
-                  <input type="number" step="any" className="input w-16 text-xs" placeholder="-Tol" value={ch.lower_tolerance} onChange={e => updateChar(idx, 'lower_tolerance', e.target.value)} />
-                  <input className="input w-14 text-xs" placeholder="UM" value={ch.unit} onChange={e => updateChar(idx, 'unit', e.target.value)} />
-                  <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                  <input className="input flex-1 text-xs" placeholder="Ex: Diametru exterior" value={ch.name} onChange={e => updateChar(idx, 'name', e.target.value)} />
+                  <input type="number" step="any" className="input w-20 text-xs" placeholder="42" value={ch.nominal} onChange={e => updateChar(idx, 'nominal', e.target.value)} />
+                  <input type="number" step="any" className="input w-16 text-xs" placeholder="+0.025" value={ch.upper_tolerance} onChange={e => updateChar(idx, 'upper_tolerance', e.target.value)} />
+                  <input type="number" step="any" className="input w-16 text-xs" placeholder="-0.025" value={ch.lower_tolerance} onChange={e => updateChar(idx, 'lower_tolerance', e.target.value)} />
+                  <input className="input w-14 text-xs" placeholder="mm" value={ch.unit} onChange={e => updateChar(idx, 'unit', e.target.value)} />
+                  <label className="flex items-center gap-1 text-xs whitespace-nowrap w-14">
                     <input type="checkbox" checked={ch.is_critical} onChange={e => updateChar(idx, 'is_critical', e.target.checked)} />
                     Critic
                   </label>

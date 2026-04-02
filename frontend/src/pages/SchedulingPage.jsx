@@ -375,9 +375,21 @@ function RunsTab() {
     }),
   })
 
+  const [smartResult, setSmartResult] = useState(null)
+
   const generateMut = useMutation({
-    mutationFn: data => api.post('/scheduling/generate', data),
-    onSuccess: () => { qc.invalidateQueries(['scheduling-runs']); setShowGenerate(false); toast.success('Planificare generata cu succes.') },
+    mutationFn: (data) => api.post('/planning/smart-schedule', {
+      configId: data.configId,
+      periodStart: data.periodStart,
+      periodEnd: data.periodEnd,
+    }),
+    onSuccess: (res) => {
+      const result = res.data
+      setSmartResult(result)
+      qc.invalidateQueries(['scheduling-runs'])
+      setShowGenerate(false)
+      toast.success('Planificare generata cu succes.')
+    },
     onError: e => toast.error(e.response?.data?.message || 'Eroare la generare'),
   })
 
@@ -394,7 +406,7 @@ function RunsTab() {
   })
 
   const applyMut = useMutation({
-    mutationFn: id => api.post(`/scheduling/runs/${id}/apply`),
+    mutationFn: id => api.post('/planning/smart-schedule/apply', { runId: id }),
     onSuccess: () => { qc.invalidateQueries(['scheduling-runs']); toast.success('Planificare aplicata cu succes!') },
     onError: (e) => {
       const msg = e.response?.data?.message || '';
@@ -436,13 +448,13 @@ function RunsTab() {
             {runs.map(run => (
               <tr key={run.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedRun(run)}>
                 <td className="px-4 py-3 text-slate-700">{new Date(run.created_at).toLocaleString('ro-RO')}</td>
-                <td className="px-4 py-3 text-slate-800 font-medium">{run.config_name || run.config_id}</td>
+                <td className="px-4 py-3 text-slate-800 font-medium">{run.config_name || configs.find(c => c.id === run.config_id)?.name || run.config_id}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[run.status] || 'bg-slate-100 text-slate-600'}`}>
                     {run.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-500">{run.total_operations ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-500">{run.total_operations ?? run.allocations_count ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-500">{run.duration_seconds ?? '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={e => { e.stopPropagation(); setSelectedRun(run) }} className="text-slate-400 hover:text-blue-500"><Eye size={14} /></button>
@@ -502,12 +514,12 @@ function RunsTab() {
       )}
 
       {/* Run detail modal */}
-      {selectedRun && <RunDetailModal run={selectedRun} onClose={() => setSelectedRun(null)} onDelete={id => deleteMut.mutate(id)} onApply={id => applyMut.mutate(id)} applyPending={applyMut.isPending} />}
+      {selectedRun && <RunDetailModal run={selectedRun} smartResult={smartResult} configs={configs} onClose={() => setSelectedRun(null)} onDelete={id => deleteMut.mutate(id)} onApply={id => applyMut.mutate(id)} applyPending={applyMut.isPending} />}
     </div>
   )
 }
 
-function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
+function RunDetailModal({ run, smartResult, configs = [], onClose, onDelete, onApply, applyPending }) {
   const [detailTab, setDetailTab] = useState('summary')
 
   const { data: detail } = useQuery({
@@ -515,19 +527,24 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
     queryFn: () => api.get(`/scheduling/runs/${run.id}`).then(r => r.data),
   })
 
-  const { data: operations = [] } = useQuery({
-    queryKey: ['scheduling-run-ops', run.id],
-    queryFn: () => api.get(`/scheduling/runs/${run.id}/operations`).then(r => r.data),
-    enabled: detailTab === 'operations' || detailTab === 'gantt',
-  })
-
-  const { data: ganttData = [] } = useQuery({
-    queryKey: ['scheduling-run-gantt', run.id],
-    queryFn: () => api.get(`/scheduling/runs/${run.id}/gantt`).then(r => r.data),
-    enabled: detailTab === 'gantt',
-  })
-
   const rd = detail || run
+
+  // Smart-schedule data: from the smartResult prop or from the run itself
+  const plan = smartResult || rd.smart_result || rd.planResult || null
+  const allocations = plan?.allocations || plan?.data?.allocations || []
+  const summary = plan?.summary || plan?.data?.summary || {}
+  const orderImpact = plan?.orderImpact || plan?.data?.orderImpact || []
+  const warnings = plan?.warnings || plan?.data?.warnings || []
+
+  // Build Gantt-style load data per machine per day from allocations
+  const ganttByMachine = {}
+  allocations.forEach(a => {
+    const machine = a.machine || a.machineName || a.machine_code || a.machineCode || 'N/A'
+    if (!ganttByMachine[machine]) ganttByMachine[machine] = []
+    ganttByMachine[machine].push(a)
+  })
+
+  const configName = rd.config_name || configs.find(c => c.id === rd.config_id)?.name || rd.config_id
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -552,33 +569,74 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
 
         <div className="p-6 overflow-auto flex-1">
           {detailTab === 'summary' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-50 rounded-lg p-4">
-                <div className="text-xs text-slate-500 mb-1">Status</div>
-                <div className="font-medium text-slate-800">{rd.status}</div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="text-xs text-blue-500 mb-1">Total piese</div>
+                  <div className="text-xl font-bold text-blue-700">{(summary.totalPieces ?? summary.total_pieces ?? allocations.reduce((s, a) => s + (a.quantity || a.qty || 0), 0)) || '—'}</div>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <div className="text-xs text-indigo-500 mb-1">Total ore</div>
+                  <div className="text-xl font-bold text-indigo-700">{summary.totalHours ?? summary.total_hours ?? '—'}</div>
+                </div>
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="text-xs text-purple-500 mb-1">Masini folosite</div>
+                  <div className="text-xl font-bold text-purple-700">{(summary.machinesUsed ?? summary.machines_used ?? Object.keys(ganttByMachine).length) || '—'}</div>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="text-xs text-green-500 mb-1">Comenzi la timp</div>
+                  <div className="text-xl font-bold text-green-700">{(summary.ordersOnTime ?? summary.orders_on_time ?? orderImpact.filter(o => !(o.delay_days > 0 || o.delayDays > 0)).length) || '—'}</div>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="text-xs text-red-500 mb-1">Comenzi intarziate</div>
+                  <div className="text-xl font-bold text-red-700">{(summary.ordersLate ?? summary.orders_late ?? orderImpact.filter(o => (o.delay_days > 0 || o.delayDays > 0)).length) || 0}</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                  <div className="text-xs text-slate-500 mb-1">Configuratie</div>
+                  <div className="font-medium text-slate-800 text-sm">{configName}</div>
+                </div>
               </div>
-              <div className="bg-slate-50 rounded-lg p-4">
-                <div className="text-xs text-slate-500 mb-1">Configuratie</div>
-                <div className="font-medium text-slate-800">{rd.config_name || rd.config_id}</div>
-              </div>
-              <div className="bg-slate-50 rounded-lg p-4">
-                <div className="text-xs text-slate-500 mb-1">Total operatii</div>
-                <div className="font-medium text-slate-800">{rd.total_operations ?? '—'}</div>
-              </div>
-              <div className="bg-slate-50 rounded-lg p-4">
-                <div className="text-xs text-slate-500 mb-1">Durata generare</div>
-                <div className="font-medium text-slate-800">{rd.duration_seconds ?? '—'}s</div>
-              </div>
-              {rd.efficiency && (
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <div className="text-xs text-slate-500 mb-1">Eficienta</div>
-                  <div className="font-medium text-slate-800">{rd.efficiency}%</div>
+              {warnings.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs text-amber-600 font-medium">Avertismente</h4>
+                  {warnings.map((w, i) => (
+                    <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">{typeof w === 'string' ? w : w.message || JSON.stringify(w)}</div>
+                  ))}
                 </div>
               )}
-              {rd.makespan && (
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <div className="text-xs text-slate-500 mb-1">Makespan</div>
-                  <div className="font-medium text-slate-800">{rd.makespan}</div>
+              {orderImpact.length > 0 && (
+                <div>
+                  <h4 className="text-xs text-slate-500 font-medium mb-2">Impact comenzi</h4>
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-slate-600">Comanda</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-slate-600">Produs</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-slate-600">Intarziere (zile)</th>
+                          <th className="text-center px-4 py-2 text-xs font-medium text-slate-600">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {orderImpact.map((o, i) => {
+                          const delay = o.delay_days || o.delayDays || 0
+                          const isLate = delay > 0
+                          return (
+                            <tr key={o.id || i} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 font-medium text-slate-800">{o.order_number || o.orderNumber || o.order || `#${i + 1}`}</td>
+                              <td className="px-4 py-2 text-slate-600">{o.product || o.product_name || o.productName || '-'}</td>
+                              <td className={`px-4 py-2 text-right font-medium ${isLate ? 'text-red-600' : 'text-green-600'}`}>{delay > 0 ? `+${delay}` : delay}</td>
+                              <td className="px-4 py-2 text-center">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isLate ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                  {isLate ? 'intarziat' : 'la timp'}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -589,25 +647,25 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Produs</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Data</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Masina</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Start</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">End</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Durata</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Produs</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Cantitate</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Ore</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {operations.map((op, i) => (
-                    <tr key={op.id || i} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-800">{op.product_name || op.product_id}</td>
-                      <td className="px-4 py-3 text-slate-700 font-mono">{op.machine_code || op.machine_id}</td>
-                      <td className="px-4 py-3 text-slate-500">{op.scheduled_start ? new Date(op.scheduled_start).toLocaleString('ro-RO') : '—'}</td>
-                      <td className="px-4 py-3 text-slate-500">{op.scheduled_end ? new Date(op.scheduled_end).toLocaleString('ro-RO') : '—'}</td>
-                      <td className="px-4 py-3 text-slate-500">{op.duration_minutes ? `${op.duration_minutes} min` : '—'}</td>
+                  {allocations.map((a, i) => (
+                    <tr key={a.id || i} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-500">{a.date || a.scheduled_start ? new Date(a.date || a.scheduled_start).toLocaleDateString('ro-RO') : '—'}</td>
+                      <td className="px-4 py-3 text-slate-700 font-mono">{a.machine || a.machineName || a.machine_code || a.machineCode || '—'}</td>
+                      <td className="px-4 py-3 text-slate-800">{a.product || a.productName || a.product_name || a.product_id || '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{a.quantity ?? a.qty ?? '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{a.hours ?? a.duration_hours ?? (a.duration_minutes ? (a.duration_minutes / 60).toFixed(1) : '—')}</td>
                     </tr>
                   ))}
-                  {operations.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nicio operatie.</td></tr>
+                  {allocations.length === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nicio alocare.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -615,7 +673,43 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
           )}
 
           {detailTab === 'gantt' && (
-            <GanttChart data={ganttData.length ? ganttData : operations} />
+            <div className="space-y-3">
+              {Object.keys(ganttByMachine).length === 0 && (
+                <div className="text-sm text-slate-400 py-4 text-center">Nicio alocare pentru Gantt.</div>
+              )}
+              {Object.entries(ganttByMachine).map(([machine, allocs]) => {
+                // Group by date for load bars
+                const byDate = {}
+                allocs.forEach(a => {
+                  const d = a.date || (a.scheduled_start ? a.scheduled_start.split('T')[0] : 'N/A')
+                  if (!byDate[d]) byDate[d] = { totalHours: 0, items: [] }
+                  byDate[d].totalHours += (a.hours || a.duration_hours || 0)
+                  byDate[d].items.push(a)
+                })
+                const maxHours = Math.max(8, ...Object.values(byDate).map(d => d.totalHours))
+                return (
+                  <div key={machine} className="bg-slate-50 rounded-lg p-3">
+                    <div className="text-sm font-medium text-slate-700 mb-2">{machine}</div>
+                    <div className="space-y-1">
+                      {Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, info]) => {
+                        const pct = Math.min(100, (info.totalHours / maxHours) * 100)
+                        const color = pct > 90 ? 'bg-red-400' : pct > 70 ? 'bg-amber-400' : 'bg-blue-400'
+                        return (
+                          <div key={date} className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 w-20 shrink-0">{date !== 'N/A' ? new Date(date).toLocaleDateString('ro-RO', { day: '2-digit', month: 'short' }) : date}</span>
+                            <div className="flex-1 bg-slate-200 rounded h-5 overflow-hidden" title={`${info.totalHours.toFixed(1)}h — ${info.items.map(it => it.product || it.productName || '').filter(Boolean).join(', ')}`}>
+                              <div className={`h-full ${color} rounded flex items-center px-1`} style={{ width: `${Math.max(2, pct)}%` }}>
+                                <span className="text-[9px] text-white truncate">{info.totalHours.toFixed(1)}h</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
 
@@ -623,11 +717,9 @@ function RunDetailModal({ run, onClose, onDelete, onApply, applyPending }) {
           <button onClick={() => { if (confirm('Stergi aceasta executie?')) onDelete(run.id) }} className="btn-secondary text-red-600 flex items-center gap-2">
             <Trash2 size={14} /> Sterge
           </button>
-          {run.status === 'completed' && (
-            <button onClick={() => onApply(run.id)} disabled={applyPending} className="btn-primary flex items-center gap-2">
-              <CheckCircle size={14} /> {applyPending ? 'Se aplica...' : 'Aplica in Plan'}
-            </button>
-          )}
+          <button onClick={() => onApply(run.id)} disabled={applyPending} className="btn-primary flex items-center gap-2">
+            <CheckCircle size={14} /> {applyPending ? 'Se aplica...' : 'Aplica in Plan'}
+          </button>
         </div>
       </div>
     </div>
@@ -746,16 +838,46 @@ function SimulationWizard({ onClose }) {
   const productsList = productsData || []
 
   const createAndRunMut = useMutation({
-    mutationFn: data => api.post('/scheduling/simulations', data),
+    mutationFn: async (data) => {
+      // Run smart schedule with modified constraints
+      const result = await api.post('/planning/smart-schedule', {
+        configId: data.configId || null,
+        periodStart: data.periodStart,
+        periodEnd: data.periodEnd,
+      })
+
+      // Also save as simulation record
+      const sim = await api.post('/scheduling/simulations', {
+        name: data.name,
+        description: data.description,
+        periodStart: data.periodStart,
+        periodEnd: data.periodEnd,
+        constraintsModified: data.constraintsModified,
+      })
+
+      return { simulation: sim.data, planResult: result.data }
+    },
     onSuccess: (res) => {
-      const sim = res.data
+      const sim = res.simulation
+      const planResult = res.planResult
       const simId = sim?.id || sim?.data?.id
       setCreatedSimId(simId)
-      if (simId) {
-        fetchSimResult(simId)
-      } else {
-        setSimResult({ detail: sim, compare: null })
-      }
+
+      // Build result view from smart-schedule data
+      const allocations = planResult?.allocations || planResult?.data?.allocations || []
+      const summaryData = planResult?.summary || planResult?.data?.summary || {}
+      const orderImpactData = planResult?.orderImpact || planResult?.data?.orderImpact || []
+      const lateCount = orderImpactData.filter(o => (o.delay_days > 0 || o.delayDays > 0)).length
+
+      setSimResult({
+        detail: sim,
+        compare: {
+          orders: orderImpactData,
+          machine_load: [],
+          summary: `Alocare: ${allocations.length} operatii, Comenzi intarziate: ${lateCount}${summaryData.totalHours ? `, Total ore: ${summaryData.totalHours}` : ''}`,
+        },
+        planResult,
+      })
       qc.invalidateQueries(['scheduling-simulations'])
     },
     onError: (e) => {

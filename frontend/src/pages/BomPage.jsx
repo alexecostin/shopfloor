@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useCallback, useMemo, Fragment } from 'react'
+import React, { useState, useCallback, useMemo, Fragment } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
@@ -2285,7 +2285,24 @@ function ProductCatalog() {
 // MAIN BOM PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function BomPage() {
+class BomErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-center">
+          <p className="text-red-600 font-bold mb-2">Eroare la incarcarea paginii BOM</p>
+          <p className="text-sm text-slate-500 mb-4">{this.state.error?.message || 'Eroare necunoscuta'}</p>
+          <button onClick={() => { this.setState({ hasError: false }); window.location.reload(); }} className="btn-primary">Reincarca pagina</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function BomPageInner() {
   const [selectedOrderId, setSelectedOrderId] = useState(null)
   const [activeTab, setActiveTab] = useState('orders')
 
@@ -2328,4 +2345,8 @@ export default function BomPage() {
       {activeTab === 'catalog' && <ProductCatalog />}
     </div>
   )
+}
+
+export default function BomPage() {
+  return <BomErrorBoundary><BomPageInner /></BomErrorBoundary>
 }
